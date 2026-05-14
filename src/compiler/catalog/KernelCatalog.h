@@ -40,8 +40,6 @@ struct KernelInfo {
      */
     const std::string kernelFuncName;
 
-    // TODO Add the path to the shared library containing the kernel function.
-
     /**
      * @brief The kernel's result types.
      */
