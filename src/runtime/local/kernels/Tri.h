@@ -68,7 +68,7 @@ template <typename VT> struct Tri<DenseMatrix<VT>> {
         const size_t numCols = arg->getNumCols();
 
         if (numRows != numCols) {
-            throw std::runtime_error("matrix must be square, but is of shape" + std::to_string(numRows) + "x" +
+            throw std::runtime_error("matrix must be square, but is of shape " + std::to_string(numRows) + "x" +
                                      std::to_string(numCols));
         }
 
@@ -107,7 +107,7 @@ template <typename VT> struct Tri<CSRMatrix<VT>> {
         const size_t numCols = arg->getNumCols();
 
         if (numRows != numCols) {
-            throw std::runtime_error("matrix must be square, but is of shape" + std::to_string(numRows) + "x" +
+            throw std::runtime_error("matrix must be square, but is of shape " + std::to_string(numRows) + "x" +
                                      std::to_string(numCols));
         }
         if (res == nullptr) {
