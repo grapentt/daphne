@@ -335,12 +335,12 @@ void DenseMatrix<const char *>::alloc_shared_strings(std::shared_ptr<CharBuf> sr
 // explicitly instantiate to satisfy linker
 template class DenseMatrix<double>;
 template class DenseMatrix<float>;
-template class DenseMatrix<int>;
-template class DenseMatrix<long>;
-template class DenseMatrix<signed char>;
-template class DenseMatrix<unsigned char>;
-template class DenseMatrix<unsigned int>;
-template class DenseMatrix<unsigned long>;
+template class DenseMatrix<int64_t>;
+template class DenseMatrix<int32_t>;
+template class DenseMatrix<int8_t>;
+template class DenseMatrix<uint64_t>;
+template class DenseMatrix<uint32_t>;
+template class DenseMatrix<uint8_t>;
 template class DenseMatrix<bool>;
 template class DenseMatrix<std::string>;
 template class DenseMatrix<FixedStr16>;

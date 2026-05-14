@@ -25,9 +25,9 @@ template <typename ValueType> size_t CSRMatrix<ValueType>::serialize(std::vector
 // explicitly instantiate to satisfy linker
 template class CSRMatrix<double>;
 template class CSRMatrix<float>;
-template class CSRMatrix<int>;
-template class CSRMatrix<long>;
-template class CSRMatrix<signed char>;
-template class CSRMatrix<unsigned char>;
-template class CSRMatrix<unsigned int>;
-template class CSRMatrix<unsigned long>;
+template class CSRMatrix<int64_t>;
+template class CSRMatrix<int32_t>;
+template class CSRMatrix<int8_t>;
+template class CSRMatrix<uint64_t>;
+template class CSRMatrix<uint32_t>;
+template class CSRMatrix<uint8_t>;
