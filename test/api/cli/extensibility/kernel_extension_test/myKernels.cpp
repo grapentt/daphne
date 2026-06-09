@@ -26,7 +26,7 @@ class DaphneContext;
 
 extern "C" {
 
-void mySumAll(float *res, const DenseMatrix<float> *arg, DaphneContext *ctx) {
+void mySumAll(float *res, const DenseMatrix<float> *arg, int kernelId, DaphneContext *ctx) {
     std::cout << "hello from mySumAll" << std::endl;
     const float *valuesArg = arg->getValues();
     *res = 0;

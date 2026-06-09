@@ -68,6 +68,7 @@ extern "C" {
     void mySumSeq(
         float * res,
         const DenseMatrix<float> * arg,
+        int kernelId,
         DaphneContext * ctx
     ) {
         std::cerr << "hello from mySumSeq()" << std::endl;
@@ -84,6 +85,7 @@ extern "C" {
     void mySumSIMD(
         float * res,
         const DenseMatrix<float> * arg,
+        int kernelId,
         DaphneContext * ctx
     ) {
         std::cerr << "hello from mySumSIMD()" << std::endl;
