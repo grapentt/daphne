@@ -31,8 +31,12 @@ Users can add their own custom kernels (physical operators) to DAPHNE following 
 
 Since this feature is still in an early stage, we only mention the most important points here rather than providing a full reference of what's supported.
 
-Furthermore, we include a running example of adding two custom kernels for the summation of a dense matrix of single-precision floating-point values. 
-We are interested in two variants: one sequential implementation for the CPU and one implementation that uses SIMD instructions from Intel's AVX (256-bit vector registers) on the CPU.
+Furthermore, we include two running examples of adding custom kernels on dense matrices of single-precision floating-point values:
+
+1. The summation of all elements in a matrix (which returns a single scalar)
+2. The element-wise square root of a matrix (which returns a new matrix of the same shape)
+
+We are interested in two variants, each: one sequential implementation for the CPU and one implementation that uses SIMD instructions from Intel's AVX (256-bit vector registers) on the CPU.
 All files shown below can be found in `/scripts/examples/extensions/myKernels/`.
 
 ### Step 1: Implementing a Kernel Extension
@@ -58,15 +62,21 @@ Then, searching for `sumAll` in `build/runtime/local/kernels/`, we find the kern
 
 C++ source file `myKernels.cpp`:
 ```c++
+#include <runtime/local/datastructures/DataObjectFactory.h>
 #include <runtime/local/datastructures/DenseMatrix.h>
 
-#include <immintrin.h> // for the SIMD-enabled kernel
+#include <cmath>
+#include <immintrin.h> // for the SIMD-enabled kernels
 #include <iostream>
 #include <stdexcept>
 
 class DaphneContext;
 
 extern "C" {
+// **************************************
+// Example of a kernel returning a scalar
+// **************************************
+
 // Custom sequential sum-kernel.
 void mySumSeq(float *res, const DenseMatrix<float> *arg, int kernelId, DaphneContext *ctx) {
     std::cerr << "hello from mySumSeq()" << std::endl;
@@ -87,11 +97,9 @@ void mySumSIMD(float *res, const DenseMatrix<float> *arg, int kernelId, DaphneCo
     // Validation.
     const size_t numCells = arg->getNumRows() * arg->getNumCols();
     if (numCells % 8)
-        throw std::runtime_error("for simplicity, the number of cells must be "
-                                 "a multiple of 8");
+        throw std::runtime_error("for simplicity, the number of cells must be a multiple of 8");
     if (arg->getNumCols() != arg->getRowSkip())
-        throw std::runtime_error("for simplicity, the argument must not be "
-                                 "a column segment of another matrix");
+        throw std::runtime_error("for simplicity, the argument must not be a column segment of another matrix");
 
     // SIMD accumulation (8x f32).
     const float *valuesArg = arg->getValues();
@@ -106,6 +114,59 @@ void mySumSIMD(float *res, const DenseMatrix<float> *arg, int kernelId, DaphneCo
            (reinterpret_cast<float *>(&acc))[2] + (reinterpret_cast<float *>(&acc))[3] +
            (reinterpret_cast<float *>(&acc))[4] + (reinterpret_cast<float *>(&acc))[5] +
            (reinterpret_cast<float *>(&acc))[6] + (reinterpret_cast<float *>(&acc))[7];
+}
+
+// **********************************************************************
+// Example of a kernel returning a data object (DenseMatrix in this case)
+// **********************************************************************
+
+// Custom sequential squareroot-kernel.
+void mySqrtSeq(DenseMatrix<float> **res_, const DenseMatrix<float> *arg, int kernelId, DaphneContext *ctx) {
+    std::cout << "hello from mySqrtSeq()" << std::endl;
+
+    // New variable for more convenient use (no double pointer).
+    DenseMatrix<float> *&res = *res_;
+
+    if (res == nullptr)
+        res = DataObjectFactory::create<DenseMatrix<float>>(arg->getNumRows(), arg->getNumCols(), false);
+
+    const float *valuesArg = arg->getValues();
+    float *valuesRes = res->getValues();
+
+    for (size_t r = 0; r < arg->getNumRows(); r++) {
+        for (size_t c = 0; c < arg->getNumCols(); c++)
+            valuesRes[c] = std::sqrt(valuesArg[c]);
+        valuesArg += arg->getRowSkip();
+        valuesRes += res->getRowSkip();
+    }
+}
+
+// Custom SIMD-enabled squareroot-kernel.
+void mySqrtSIMD(DenseMatrix<float> **res_, const DenseMatrix<float> *arg, int kernelId, DaphneContext *ctx) {
+    std::cout << "hello from mySqrtSIMD()" << std::endl;
+
+    // Validation.
+    if (arg->getNumCols() % 8)
+        throw std::runtime_error("for simplicity, the number of columns must be a multiple of 8");
+    if (arg->getNumCols() != arg->getRowSkip())
+        throw std::runtime_error("for simplicity, the argument must not be a column segment of another matrix");
+
+    // New variable for more convenient use (no double pointer).
+    DenseMatrix<float> *&res = *res_;
+
+    if (res == nullptr)
+        res = DataObjectFactory::create<DenseMatrix<float>>(arg->getNumRows(), arg->getNumCols(), false);
+
+    const float *valuesArg = arg->getValues();
+    float *valuesRes = res->getValues();
+
+    // SIMD processing.
+    for (size_t r = 0; r < arg->getNumRows(); r++)
+        for (size_t c = 0; c < arg->getNumCols() / 8; c++) {
+            _mm256_storeu_ps(valuesRes, _mm256_sqrt_ps(_mm256_loadu_ps(valuesArg)));
+            valuesArg += 8;
+            valuesRes += 8;
+        }
 }
 }
 ```
@@ -125,6 +186,22 @@ Kernel catalog file `myKernels.json`:
     "opMnemonic": "sumAll",
     "kernelFuncName": "mySumSIMD",
     "resTypes": ["float"],
+    "argTypes": ["DenseMatrix<float>"],
+    "backend": "CPP",
+    "libPath": "libMyKernels.so"
+  },
+  {
+    "opMnemonic": "ewSqrt",
+    "kernelFuncName": "mySqrtSeq",
+    "resTypes": ["DenseMatrix<float>"],
+    "argTypes": ["DenseMatrix<float>"],
+    "backend": "CPP",
+    "libPath": "libMyKernels.so"
+  },
+  {
+    "opMnemonic": "ewSqrt",
+    "kernelFuncName": "mySqrtSIMD",
+    "resTypes": ["DenseMatrix<float>"],
     "argTypes": ["DenseMatrix<float>"],
     "backend": "CPP",
     "libPath": "libMyKernels.so"
@@ -214,6 +291,8 @@ We execute this script by:
 bin/daphne --kernel-ext scripts/examples/extensions/myKernels/myKernels.json scripts/examples/extensions/myKernels/demoSIMD.daphne
 ```
 
+Analogously, we could use the kernel names `mySqrtSeq` and `mySqrtSIMD` with DaphneDSL's `sqrt()` built-in function, e.g., `sqrt::mySqrtSIMD(...)`.
+
 #### Automatic Use of Custom Kernels
 
 The automatic use of custom kernels is currently restricted to the selection of a kernel based on its result/argument data/value types and its priority level.
@@ -221,7 +300,7 @@ In the future we plan to support custom cost models as well.
 
 *Running example:*
 
-Continuing the running example from above, we can make DAPHNE use the custom kernels `mySumSeq()` or `mySumSIMD()` even without a manual kernel hint by specifying a suitable *priority* when registering the `myKernels` extension with DAPHNE.
+Continuing the running example from above, we can make DAPHNE use the custom kernels `mySumSeq()` or `mySumSIMD()` (analogously for `mySqrtSeq()` or `mySqrtSIMD()`) even without a manual kernel hint by specifying a suitable *priority* when registering the `myKernels` extension with DAPHNE.
 
 Priority levels can optionally be specified with the `--kernel-ext` command line argument by appending a colon (`:`) followed by the priority as an integer.
 The default priority of `0` is used for all built-in kernels and for extension kernels in case no priority is specified.

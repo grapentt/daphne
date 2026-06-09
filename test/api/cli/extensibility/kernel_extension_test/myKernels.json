@@ -6,5 +6,13 @@
     "argTypes": ["DenseMatrix<float>"],
     "backend": "CPP",
     "libPath": "libMyKernels.so"
+  },
+  {
+    "opMnemonic": "ewSqrt",
+    "kernelFuncName": "mySqrt",
+    "resTypes": ["DenseMatrix<float>"],
+    "argTypes": ["DenseMatrix<float>"],
+    "backend": "CPP",
+    "libPath": "libMyKernels.so"
   }
 ]

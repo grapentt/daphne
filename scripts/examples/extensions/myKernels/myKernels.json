@@ -14,5 +14,21 @@
     "argTypes": ["DenseMatrix<float>"],
     "backend": "CPP",
     "libPath": "libMyKernels.so"
+  },
+  {
+    "opMnemonic": "ewSqrt",
+    "kernelFuncName": "mySqrtSeq",
+    "resTypes": ["DenseMatrix<float>"],
+    "argTypes": ["DenseMatrix<float>"],
+    "backend": "CPP",
+    "libPath": "libMyKernels.so"
+  },
+  {
+    "opMnemonic": "ewSqrt",
+    "kernelFuncName": "mySqrtSIMD",
+    "resTypes": ["DenseMatrix<float>"],
+    "argTypes": ["DenseMatrix<float>"],
+    "backend": "CPP",
+    "libPath": "libMyKernels.so"
   }
 ]

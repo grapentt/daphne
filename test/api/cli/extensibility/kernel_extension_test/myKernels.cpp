@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-// TODO Should be <daphne/runtime/local/datastructures/DenseMatrix.h> for more
-// clarity.
+// TODO Should be <daphne/runtime/local/datastructures/...> for more clarity (i.e., showing that the header belongs to
+// DAPHNE).
+#include <runtime/local/datastructures/DataObjectFactory.h>
 #include <runtime/local/datastructures/DenseMatrix.h>
 
 #include <iostream>
 
+#include <cmath>
 #include <cstdlib>
 
 class DaphneContext;
@@ -34,6 +36,26 @@ void mySumAll(float *res, const DenseMatrix<float> *arg, int kernelId, DaphneCon
         for (size_t c = 0; c < arg->getNumCols(); c++)
             *res += valuesArg[c];
         valuesArg += arg->getRowSkip();
+    }
+}
+
+void mySqrt(DenseMatrix<float> **res_, const DenseMatrix<float> *arg, int kernelId, DaphneContext *ctx) {
+    std::cout << "hello from mySqrt()" << std::endl;
+
+    // New variable for more convenient use (no double pointer).
+    DenseMatrix<float> *&res = *res_;
+
+    if (res == nullptr)
+        res = DataObjectFactory::create<DenseMatrix<float>>(arg->getNumRows(), arg->getNumCols(), false);
+
+    const float *valuesArg = arg->getValues();
+    float *valuesRes = res->getValues();
+
+    for (size_t r = 0; r < arg->getNumRows(); r++) {
+        for (size_t c = 0; c < arg->getNumCols(); c++)
+            valuesRes[c] = std::sqrt(valuesArg[c]);
+        valuesArg += arg->getRowSkip();
+        valuesRes += res->getRowSkip();
     }
 }
 }
