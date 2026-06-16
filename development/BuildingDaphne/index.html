@@ -1375,6 +1375,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#building-on-macos-experimental" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building on macOS (Experimental)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Building on macOS (Experimental)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#building-on-wsl" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2026,6 +2076,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#building-on-macos-experimental" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building on macOS (Experimental)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Building on macOS (Experimental)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#building" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Limitations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#building-on-wsl" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2225,14 +2325,34 @@ dependencies get installed. The build script must be invoked with the following 
 </tbody>
 </table>
 <hr />
+<h2 id="building-on-macos-experimental">Building on macOS (Experimental)</h2>
+<p>DAPHNE can be built natively on macOS with Apple Silicon (ARM64). This support is experimental.</p>
+<h3 id="prerequisites">Prerequisites</h3>
+<p>Install <a href="https://brew.sh/">Homebrew</a>, then install the required packages:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>brew<span class="w"> </span>install<span class="w"> </span>gcc@15<span class="w"> </span>cmake<span class="w"> </span>ninja<span class="w"> </span>wget<span class="w"> </span>zstd<span class="w"> </span>libomp
+</code></pre></div>
+<p>GCC is required because DAPHNE and all its dependencies must be built with the
+same C++ standard library (libstdc++). Apple Clang uses libc++, which is
+ABI-incompatible and causes link failures.</p>
+<h3 id="building">Building</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>./build.sh<span class="w"> </span>--no-papi
+</code></pre></div>
+<p>The build script automatically detects macOS and configures GCC-15 as the compiler. PAPI is not supported on macOS, so <code>--no-papi</code> is required.</p>
+<h3 id="known-limitations">Known Limitations</h3>
+<ul>
+<li>CPU pinning (thread affinity) is disabled on macOS</li>
+<li>PAPI-based profiling is not available</li>
+<li>CUDA and FPGA options are not supported on macOS</li>
+<li>Only Apple Silicon (ARM64) has been tested</li>
+</ul>
 <h2 id="building-on-wsl">Building on WSL</h2>
 <p>When using Windows Subsystems for Linux (WSL), the default memory limit for WSL is 50% of the total memory of the underlying Windows host. This can lead to build fails due to SIGKILL for DAPHNE builds. <a href="https://learn.microsoft.com/en-us/windows/wsl/wsl-config">Advanced settings configuration in WSL</a> describes how the memory limit can be configured.</p>
 <h2 id="extension">Extension</h2>
 <h3 id="overview-of-the-build-script">Overview of the Build Script</h3>
 <p>The build script is divided into sections, visualized by</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1">#******************************************************************************</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># #1 Section name</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1">#******************************************************************************</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1">#******************************************************************************</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="c1"># #1 Section name</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="c1">#******************************************************************************</span>
 </code></pre></div>
 <p>Each section should only contain functionality related to the section name.</p>
 <p>The following list contains a rough overview of the sections and the concrete functions or functionality done here.</p>
@@ -2310,31 +2430,31 @@ dependencies get installed. The build script must be invoked with the following 
 </li>
 <li>
 <p>Download the dependency, encased by:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># in segment 5</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>&lt;dep&gt;_version<span class="o">=</span><span class="s2">&quot;&lt;dep_version&gt;&quot;</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># in segment 8</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="c1"># ----</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="c1"># 8.x Your dependency</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># ----</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>&lt;dep&gt;_dirname<span class="o">=</span><span class="s2">&quot;&lt;dep_name&gt;&quot;</span><span class="w"> </span><span class="c1"># 3.1</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>&lt;dep&gt;_version_internal<span class="o">=(</span><span class="s2">&quot;&lt;dep_name&gt;_v</span><span class="si">${</span><span class="p">&lt;dep&gt;_version</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;v1&quot;</span><span class="o">)</span><span class="w"> </span><span class="c1"># 3.2</span>
-<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>&lt;dep&gt;...<span class="w"> </span><span class="c1"># 3.3</span>
-<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="k">if</span><span class="w"> </span>!<span class="w"> </span>is_dependency_downloaded<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>
-<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">    </span><span class="c1"># do your stuff here</span>
-<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>
-<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">    </span>dependency_download_success<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="k">fi</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># in segment 5</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>&lt;dep&gt;_version<span class="o">=</span><span class="s2">&quot;&lt;dep_version&gt;&quot;</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># in segment 8</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="c1"># ----</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="c1"># 8.x Your dependency</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># ----</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>&lt;dep&gt;_dirname<span class="o">=</span><span class="s2">&quot;&lt;dep_name&gt;&quot;</span><span class="w"> </span><span class="c1"># 3.1</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>&lt;dep&gt;_version_internal<span class="o">=(</span><span class="s2">&quot;&lt;dep_name&gt;_v</span><span class="si">${</span><span class="p">&lt;dep&gt;_version</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;v1&quot;</span><span class="o">)</span><span class="w"> </span><span class="c1"># 3.2</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>&lt;dep&gt;...<span class="w"> </span><span class="c1"># 3.3</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="k">if</span><span class="w"> </span>!<span class="w"> </span>is_dependency_downloaded<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">    </span><span class="c1"># do your stuff here</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">    </span>dependency_download_success<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="k">fi</span>
 </code></pre></div>
 <p><strong>Hint:</strong> It is recommended to use the paths defined in section 6 for dependency downloads and installations. There are predefined paths like <code>cacheDir</code>, <code>sourcePrefix</code>, <code>buildPrefix</code> and <code>installPrefix</code>. Take a look at other dependencies to see how to use them.
 1. Install the dependency (if necessary), encased by:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">if</span><span class="w"> </span>!<span class="w"> </span>is_dependency_installed<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="c1"># do your stuff here</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span>dependency_install_success<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">fi</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">if</span><span class="w"> </span>!<span class="w"> </span>is_dependency_installed<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="c1"># do your stuff here</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span>dependency_install_success<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="p">&lt;dep&gt;_version_internal[@]</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="k">fi</span>
 </code></pre></div>
 </li>
 <li>
