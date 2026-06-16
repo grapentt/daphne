@@ -341,6 +341,10 @@ template class DenseMatrix<int8_t>;
 template class DenseMatrix<uint64_t>;
 template class DenseMatrix<uint32_t>;
 template class DenseMatrix<uint8_t>;
+#if defined(__APPLE__) && defined(__aarch64__)
+// On macOS ARM64, size_t is distinct from uint64_t.
+template class DenseMatrix<size_t>;
+#endif
 template class DenseMatrix<bool>;
 template class DenseMatrix<std::string>;
 template class DenseMatrix<FixedStr16>;
