@@ -1219,6 +1219,16 @@ if [ -n "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]; then
     # Same name as the CMake cache variable; CMake validates the value.
     DAPHNE_CMAKE_EXTRA+=(-DDAPHNE_KERNEL_COMPILE_JOBS="$DAPHNE_KERNEL_COMPILE_JOBS")
 fi
+
+# Optional global Ninja job cap passed straight to `cmake --build --parallel`.
+# On memory-constrained hosts (WSL 2, Docker Desktop, containers with --memory)
+# Ninja's default of nproc parallel jobs can OOM the compiler before the kernel
+# job pool (DAPHNE_KERNEL_COMPILE_JOBS) is even reached. Set this to a positive
+# integer to cap *all* compile targets; leave unset for uncapped (default).
+CMAKE_BUILD_EXTRA=()
+if [ -n "${DAPHNE_COMPILE_JOBS:-}" ]; then
+    CMAKE_BUILD_EXTRA+=(--parallel "$DAPHNE_COMPILE_JOBS")
+fi
 if [ "$IS_DARWIN" == "1" ]; then
     macosSdk="${DAPHNE_MACOS_SDK:-/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk}"
     # GCC-15 is already exported; explicitly pass to cmake as well.
@@ -1235,7 +1245,7 @@ cmake -S "$projectRoot" -B "$daphneBuildDir" -G Ninja -DANTLR_VERSION="$antlrVer
     -DCMAKE_PREFIX_PATH="$installPrefix" \
     $BUILD_CUDA $BUILD_FPGAOPENCL $BUILD_DEBUG $BUILD_MPI $BUILD_HDFS $BUILD_PAPI "${DAPHNE_CMAKE_EXTRA[@]}"
 
-cmake --build "$daphneBuildDir" --target "$target"
+cmake --build "$daphneBuildDir" --target "$target" "${CMAKE_BUILD_EXTRA[@]}"
 
 build_ts_end=$(date +%s%N)
 daphne_msg "Successfully built Daphne://${target} (took $(printableTimestamp $((build_ts_end - build_ts_begin))))"

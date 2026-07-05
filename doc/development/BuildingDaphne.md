@@ -168,23 +168,35 @@ The build script automatically detects macOS and configures GCC-15 as the compil
 
 ## Building on WSL
 
-When using Windows Subsystem for Linux (WSL), the default memory limit for WSL is 50% of the total memory of the underlying Windows host. This can lead to DAPHNE build failures where `cc1plus` is killed by the Linux OOM killer. [Advanced settings configuration in WSL](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) describes how the memory limit can be configured. If raising the limit is not an option, see [Memory Requirements](#memory-requirements) for a way to cap kernel-compile parallelism instead.
+When using Windows Subsystem for Linux (WSL), the default memory limit for WSL is 50% of the total memory of the underlying Windows host. This can lead to DAPHNE build failures where `cc1plus` is killed by the Linux OOM killer. [Advanced settings configuration in WSL](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) describes how the memory limit can be configured. If raising the limit is not an option, see [Memory Requirements](#memory-requirements) for how to cap build parallelism instead.
 
 ## Memory Requirements
 
 Compiling the pre-compiled kernels library instantiates many kernel templates. Each translation unit can consume several GB of RAM at peak. On memory-constrained hosts (WSL default, small VMs, Docker Desktop with the default VM sizing, containers started with a `--memory` limit) building all kernel translation units in parallel can trigger the OOM killer, which surfaces as `fatal error: Killed signal terminated program cc1plus`.
 
-Pass `-DDAPHNE_KERNEL_COMPILE_JOBS=<n>` at CMake configure time to cap concurrent compilation of the kernel targets (`KernelObjLib`, and `CUDAKernels` when `--cuda` is used). All other targets keep scaling with the global job count. Ninja only; the option is ignored with a warning under other generators.
+Two complementary knobs are available:
 
-As a rule of thumb, allow roughly one job per 2–4 GB of RAM available to the build (e.g. `n=2` on an 8 GB WSL VM, `n=4` on a 16 GB host).
-
-The build script forwards this to CMake via an environment variable of the same name:
+**`DAPHNE_COMPILE_JOBS`** — caps *total* Ninja concurrency for all targets. Without this, Ninja defaults to `nproc` parallel jobs, which can OOM the MLIR/compiler targets before the kernel phase is even reached. Pass it as an environment variable; `build.sh` forwards it to `cmake --build --parallel`:
 
 ```bash
-DAPHNE_KERNEL_COMPILE_JOBS=2 ./build.sh
+DAPHNE_COMPILE_JOBS=4 ./build.sh
 ```
 
-Leave the option unset for the default (uncapped) behavior.
+**`DAPHNE_KERNEL_COMPILE_JOBS`** — finer-grained cap applied on top, only for the extra-heavy kernel translation units (`KernelObjLib`, and `CUDAKernels` when `--cuda` is used). Implemented as a Ninja job pool; ignored with a warning under other generators. Pass it as an environment variable or via `-DDAPHNE_KERNEL_COMPILE_JOBS=<n>` at CMake configure time:
+
+```bash
+DAPHNE_COMPILE_JOBS=4 DAPHNE_KERNEL_COMPILE_JOBS=2 ./build.sh
+```
+
+As a rule of thumb for the combined settings:
+
+| Available RAM | `DAPHNE_COMPILE_JOBS` | `DAPHNE_KERNEL_COMPILE_JOBS` |
+|---|---|---|
+| ≥ 8 GB | `4` | `2` |
+| 6 GB | `3` | `2` |
+| 4 GB | `2` | `1` |
+
+Leave both options unset for the default (uncapped) behavior.
 
 ## Extension
 
