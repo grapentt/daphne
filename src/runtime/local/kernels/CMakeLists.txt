@@ -90,6 +90,9 @@ if(USE_CUDA AND CMAKE_CUDA_COMPILER)
             CUDA::cusparse ${CUDA_cudnn_LIBRARY} CUDA::cusolver Util MLIRDaphneInference fmt::fmt)
     set_target_properties(CUDAKernels PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
     set_property(TARGET CUDAKernels PROPERTY CUDA_ARCHITECTURES all)
+    if(DAPHNE_KERNEL_POOL_ACTIVE)
+        set_property(TARGET CUDAKernels PROPERTY JOB_POOL_COMPILE daphne_kernel_compile)
+    endif()
 endif()
 
 execute_process(
@@ -144,6 +147,9 @@ set(SOURCES_cpp_kernels
 # The library of pre-compiled kernels. Will be linked into the JIT-compiled user program.
 add_library(KernelObjLib OBJECT ${SOURCES_cpp_kernels} ${HEADERS_cpp_kernels})
 set_target_properties(KernelObjLib PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+if(DAPHNE_KERNEL_POOL_ACTIVE)
+    set_property(TARGET KernelObjLib PROPERTY JOB_POOL_COMPILE daphne_kernel_compile)
+endif()
 add_library(AllKernels SHARED $<TARGET_OBJECTS:KernelObjLib>)
 set_target_properties(AllKernels PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 

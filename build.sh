@@ -1214,6 +1214,11 @@ fi
 daphne_msg "Build Daphne"
 
 DAPHNE_CMAKE_EXTRA=()
+if [ -n "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]; then
+    # Forward the env var to CMake as -DDAPHNE_KERNEL_COMPILE_JOBS=<n>.
+    # Same name as the CMake cache variable; CMake validates the value.
+    DAPHNE_CMAKE_EXTRA+=(-DDAPHNE_KERNEL_COMPILE_JOBS="$DAPHNE_KERNEL_COMPILE_JOBS")
+fi
 if [ "$IS_DARWIN" == "1" ]; then
     macosSdk="${DAPHNE_MACOS_SDK:-/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk}"
     # GCC-15 is already exported; explicitly pass to cmake as well.
@@ -1228,7 +1233,7 @@ fi
 
 cmake -S "$projectRoot" -B "$daphneBuildDir" -G Ninja -DANTLR_VERSION="$antlrVersion" \
     -DCMAKE_PREFIX_PATH="$installPrefix" \
-    $BUILD_CUDA $BUILD_FPGAOPENCL $BUILD_DEBUG $BUILD_MPI $BUILD_HDFS $BUILD_PAPI ${DAPHNE_CMAKE_EXTRA[@]}
+    $BUILD_CUDA $BUILD_FPGAOPENCL $BUILD_DEBUG $BUILD_MPI $BUILD_HDFS $BUILD_PAPI "${DAPHNE_CMAKE_EXTRA[@]}"
 
 cmake --build "$daphneBuildDir" --target "$target"
 

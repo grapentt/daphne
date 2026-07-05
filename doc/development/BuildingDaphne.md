@@ -33,6 +33,9 @@ Following builds only take a few seconds/minutes.
 Contents:
 
 - [Usage of the build script](#usage-of-the-build-script)
+- [Building on macOS (Experimental)](#building-on-macos-experimental)
+- [Building on WSL](#building-on-wsl)
+- [Memory Requirements](#memory-requirements)
 - [Extension of the build script](#extension)
 
 ---
@@ -165,7 +168,23 @@ The build script automatically detects macOS and configures GCC-15 as the compil
 
 ## Building on WSL
 
-When using Windows Subsystems for Linux (WSL), the default memory limit for WSL is 50% of the total memory of the underlying Windows host. This can lead to build fails due to SIGKILL for DAPHNE builds. [Advanced settings configuration in WSL](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) describes how the memory limit can be configured.
+When using Windows Subsystem for Linux (WSL), the default memory limit for WSL is 50% of the total memory of the underlying Windows host. This can lead to DAPHNE build failures where `cc1plus` is killed by the Linux OOM killer. [Advanced settings configuration in WSL](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) describes how the memory limit can be configured. If raising the limit is not an option, see [Memory Requirements](#memory-requirements) for a way to cap kernel-compile parallelism instead.
+
+## Memory Requirements
+
+Compiling the pre-compiled kernels library instantiates many kernel templates. Each translation unit can consume several GB of RAM at peak. On memory-constrained hosts (WSL default, small VMs, Docker Desktop with the default VM sizing, containers started with a `--memory` limit) building all kernel translation units in parallel can trigger the OOM killer, which surfaces as `fatal error: Killed signal terminated program cc1plus`.
+
+Pass `-DDAPHNE_KERNEL_COMPILE_JOBS=<n>` at CMake configure time to cap concurrent compilation of the kernel targets (`KernelObjLib`, and `CUDAKernels` when `--cuda` is used). All other targets keep scaling with the global job count. Ninja only; the option is ignored with a warning under other generators.
+
+As a rule of thumb, allow roughly one job per 2–4 GB of RAM available to the build (e.g. `n=2` on an 8 GB WSL VM, `n=4` on a 16 GB host).
+
+The build script forwards this to CMake via an environment variable of the same name:
+
+```bash
+DAPHNE_KERNEL_COMPILE_JOBS=2 ./build.sh
+```
+
+Leave the option unset for the default (uncapped) behavior.
 
 ## Extension
 
