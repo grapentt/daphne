@@ -196,6 +196,8 @@ The two knobs and their scope:
 
 **`DAPHNE_KERNEL_COMPILE_JOBS`** — finer-grained cap applied on top, only for the extra-heavy kernel translation units (`KernelObjLib`, and `CUDAKernels` when `--cuda` is used). Implemented as a Ninja job pool; ignored with a warning under other generators.
 
+Auto-detection sets both knobs to the same value (kernel jobs count against the global cap too, so the kernel-specific pool only bites when it's *tighter* than the global one). You would set them to different values only if you want, say, a global cap of 4 for the MLIR phase but a tighter cap of 2 specifically for the kernel phase.
+
 Reference table for manual overrides:
 
 | Available RAM | `DAPHNE_COMPILE_JOBS` | `DAPHNE_KERNEL_COMPILE_JOBS` |
@@ -204,7 +206,9 @@ Reference table for manual overrides:
 | 6 GB | `2` | `2` |
 | 4 GB | `1` | `1` |
 
-Leave both options unset to use auto-detection (recommended).
+Leave both options unset to use auto-detection (recommended). The auto-detected values follow a conservative "2 GB per parallel slot" rule; raise them if you know your compile TUs peak lower on your system.
+
+**Known lower bound.** One kernel translation unit (`DistributedPipeline.cpp`) intrinsically peaks at ~3.6 GiB regardless of the `JOBS` setting. On hosts with less than about 4 GB of available RAM the build cannot fit even with `DAPHNE_COMPILE_JOBS=1`; increase the host / container memory in that case. Reducing this floor further would require splitting `DistributedWrapper.h` (which `DistributedPipeline.cpp` includes) one level deeper — larger refactor, follow-up work.
 
 ## Extension
 

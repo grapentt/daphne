@@ -1305,6 +1305,12 @@ DAPHNE_CMAKE_EXTRA=()
 # Reads the cgroup v2/v1 memory limit (Docker --memory=) or /proc/meminfo (host RAM).
 # Only activates when memory would be the bottleneck; prints a message in that case.
 # Explicit env-var values always take precedence over the auto-detected defaults.
+#
+# The guard uses OR (not AND) intentionally: if the user has set only one of the
+# two knobs, we still compute both auto-detected values, but the `:=` assignments
+# below only fill the knob that is still unset. So partial overrides work:
+# `DAPHNE_KERNEL_COMPILE_JOBS=1 ./build.sh` uses the user's 1 for the kernel pool
+# and the auto-detected value for the global cap.
 if [ -z "${DAPHNE_COMPILE_JOBS:-}" ] || [ -z "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]; then
     _avail_gb=$(get_memory_gb)
     read -r _auto_cj _auto_kj <<< "$(calc_daphne_jobs "$_avail_gb")"
