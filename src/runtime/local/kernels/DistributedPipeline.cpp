@@ -14,35 +14,33 @@
  * limitations under the License.
  */
 
-#pragma once
+#include <runtime/local/kernels/DistributedPipeline.h>
 
-// Only forward declarations are exposed here. The definition of
-// distributedPipeline lives in DistributedPipeline.cpp so that translation
-// units instantiating this kernel do not have to parse the transitive header
-// closure of DistributedWrapper.h (gRPC, protobuf, MPI, MLIR init-all-
-// dialects). Doing so reduces the compile-time peak RSS of the generated
-// kernels_*.cpp that references this kernel from ~3.6 GiB to ~1 GiB.
+#include <runtime/distributed/coordinator/kernels/DistributedWrapper.h>
 
-#include <runtime/local/context/DaphneContext.h>
-#include <runtime/local/datastructures/DenseMatrix.h>
+#include <memory>
 
-#include <cstddef>
-#include <cstdint>
+using mlir::daphne::VectorCombine;
+using mlir::daphne::VectorSplit;
 
-class Structure;
-
-// One output. The template is instantiated only for DTRes = DenseMatrix<double>
-// via kernels.json; that instantiation is provided out-of-line in
-// DistributedPipeline.cpp.
 template <class DTRes>
 void distributedPipeline(DTRes **outputs, size_t numOutputs, const Structure **inputs, size_t numInputs,
                          int64_t *outRows, int64_t *outCols, int64_t *splits, int64_t *combines, const char *irCode,
-                         DCTX(ctx));
+                         DCTX(ctx)) {
 
-// Only DenseMatrix<double> is used by the CPP kernels library. Declared extern
-// so no TU implicitly instantiates the template from the forward declaration
-// above.
-extern template void distributedPipeline<DenseMatrix<double>>(
+    auto wrapper = std::make_unique<DistributedWrapper<DTRes>>(ctx);
+    DTRes ***res = new DTRes **[numOutputs];
+    for (size_t i = 0; i < numOutputs; i++)
+        res[i] = outputs + i;
+    wrapper->execute(irCode, res, inputs, numInputs, numOutputs, outRows, outCols,
+                     reinterpret_cast<VectorSplit *>(splits), reinterpret_cast<VectorCombine *>(combines));
+}
+
+// Explicit instantiations for the types listed under this kernel in
+// kernels.json. Drift is detected at CMake configure time by
+// checkExplicitInstantiations.py; if that check fails, add the missing
+// `template void distributedPipeline<...>` line below or drop the extra one.
+template void distributedPipeline<DenseMatrix<double>>(
         DenseMatrix<double> **outputs, size_t numOutputs,
         const Structure **inputs, size_t numInputs,
         int64_t *outRows, int64_t *outCols,

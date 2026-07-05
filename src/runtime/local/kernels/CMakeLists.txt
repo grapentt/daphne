@@ -99,6 +99,24 @@ execute_process(
     ${PROJECT_SOURCE_DIR}/lib/catalog.json CPP
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/)
 
+# Verify that hand-written explicit template instantiations (currently just
+# DistributedPipeline.cpp) match what kernels.json lists for the same kernel.
+# Drift here shows up as an undefined-reference link error much later in the
+# build; failing here surfaces the problem at configure time with a fix hint.
+execute_process(
+  COMMAND
+    ${Python3_EXECUTABLE} checkExplicitInstantiations.py kernels.json
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/
+  RESULT_VARIABLE _checkExplicitInstantiations_result
+  OUTPUT_VARIABLE _checkExplicitInstantiations_stdout
+  ERROR_VARIABLE _checkExplicitInstantiations_stderr)
+if(NOT _checkExplicitInstantiations_result EQUAL 0)
+    message(FATAL_ERROR
+        "checkExplicitInstantiations.py reported drift between kernels.json "
+        "and hand-written explicit instantiations:\n"
+        "${_checkExplicitInstantiations_stderr}")
+endif()
+
 file(GLOB CODEGEN_CPP_FILES CONFIGURE_DEPENDS
      "${PROJECT_BINARY_DIR}/src/runtime/local/kernels/kernels_*.cpp")
 # message("CODEGEN_CPP_FILES: ${CODEGEN_CPP_FILES}")
@@ -115,6 +133,7 @@ set(SOURCES_cpp_kernels
         ${PROJECT_SOURCE_DIR}/src/runtime/local/instrumentation/KernelInstrumentation.cpp
         ${CODEGEN_CPP_FILES}
         ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/CreateDaphneContext.cpp
+        ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/DistributedPipeline.cpp
         ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/Pooling.cpp
         ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/VectorizedPipeline.h
         ${PROJECT_SOURCE_DIR}/src/runtime/local/vectorized/MTWrapper_dense.cpp
