@@ -15,10 +15,15 @@ The build fails because compiling DAPHNE's kernel library needs a lot of RAM per
 My fix does three things:
 
 1. Reworks the one really-heavy kernel so it takes ~1 GB instead of 3.6 GB to compile.
-2. Adds `DAPHNE_COMPILE_JOBS` — an opt-in knob that caps **total** Ninja concurrency (all compile targets). This stops the OOM killer from hitting the non-kernel MLIR/compiler files before the kernel phase is even reached.
-3. Adds `DAPHNE_KERNEL_COMPILE_JOBS` — a finer-grained cap applied on top, only for the extra-heavy kernel translation units.
+2. Makes `build.sh` **automatically detect** available memory (from the Docker `--memory=` cgroup limit) and set safe parallelism values before the build starts. You don't need to set any env vars — it just works.
+3. Adds two opt-in knobs (`DAPHNE_COMPILE_JOBS`, `DAPHNE_KERNEL_COMPILE_JOBS`) if you want to override the auto-detected values.
 
-Both knobs default to unset (no throttle), so behaviour for anyone who doesn't hit the OOM is unchanged. On a constrained host you set both.
+When memory is the bottleneck, the build will print something like:
+
+```
+Memory-constrained host detected (8 GB available)
+Auto-setting COMPILE_JOBS=3, KERNEL_COMPILE_JOBS=3 to prevent OOM
+```
 
 ---
 
@@ -52,7 +57,7 @@ docker info --format '{{.MemTotal}}' | awk '{printf "%.1f GB\n", $1/1024/1024/10
 
 That's the memory ceiling of Docker's underlying VM. On Docker Desktop for Windows, this is typically 8 GB by default.
 
-**Write that number down.** You'll pick `JOBS` based on it below.
+**Write that number down** — just in case you need to check it later.
 
 If you want to increase it, edit `C:\Users\<you>\.wslconfig` in a text editor (create the file if it doesn't exist):
 
@@ -63,18 +68,7 @@ memory=12GB
 
 Then in PowerShell run `wsl --shutdown`, and restart Docker Desktop. Skip this step if the current allocation is fine.
 
-## Step 3: pick the right JOBS values
-
-| Docker VM memory | `DAPHNE_COMPILE_JOBS` | `DAPHNE_KERNEL_COMPILE_JOBS` | Wall clock |
-|---|---|---|---|
-| **≥ 8 GB** | `4` | `2` | ~8-10 min |
-| **6 GB** | `3` | `2` | ~10-12 min |
-| **4 GB** | `2` | `1` | ~15-18 min |
-| **< 4 GB** | Increase in `.wslconfig` first | | |
-
-If in doubt, start with `COMPILE_JOBS=4` / `KERNEL_COMPILE_JOBS=2`. If it still OOMs, drop both by one.
-
-## Step 4: pull the dev image
+## Step 3: pull the dev image
 
 In your WSL 2 Ubuntu shell:
 
@@ -84,7 +78,7 @@ docker pull daphneeu/daphne-dev:latest_X86-64_BASE
 
 That's ~5 GB. One-time download. This is the image with pre-compiled third-party deps that skips 30-90 minutes of dep-compilation.
 
-## Step 5: clone my branch
+## Step 4: clone my branch
 
 Still in the WSL 2 Ubuntu shell:
 
@@ -94,11 +88,9 @@ git clone --branch fix/kernel-compile-oom https://github.com/grapentt/daphne.git
 cd daphne-oom-fix
 ```
 
-The branch is called `fix/kernel-compile-oom`. Two real commits fix the OOM; a third commit is just this file.
+## Step 5: run the build inside the container
 
-## Step 6: run the build inside the container
-
-**Replace the values below with your chosen values from step 3.** Copy-paste the whole block:
+No env vars needed — the build auto-detects your memory and caps parallelism accordingly. Just copy-paste this block:
 
 ```bash
 docker run --rm --entrypoint /bin/bash \
@@ -106,25 +98,30 @@ docker run --rm --entrypoint /bin/bash \
     --mount type=bind,source=$(pwd),target=/daphne \
     --mount type=tmpfs,destination=/daphne/thirdparty/installed \
     --workdir /daphne \
-    -e DAPHNE_COMPILE_JOBS=4 \
-    -e DAPHNE_KERNEL_COMPILE_JOBS=2 \
     daphneeu/daphne-dev:latest_X86-64_BASE \
     -c './build.sh --no-deps --installPrefix /usr/local/'
 ```
 
+**Match `--memory=8g` to your Docker VM memory from step 2.** If your VM has 12 GB, use `12g`. The build script reads this limit from the container's cgroup and sets parallelism automatically.
+
 What each flag does:
 
-- `--memory=8g --memory-swap=8g` — hard memory cap the container is allowed to use. Match this to your Docker VM memory (step 2). If your VM has 12 GB, use `12g`.
+- `--memory=8g --memory-swap=8g` — hard memory cap the container is allowed to use.
 - `--mount type=bind,source=$(pwd),target=/daphne` — makes the cloned repo visible inside the container at `/daphne`.
 - `--mount type=tmpfs,destination=/daphne/thirdparty/installed` — prevents the container's `./build.sh` from writing over the pre-baked deps at `/usr/local/`. Follows the pattern in DAPHNE's `containers/README.md`.
-- `-e DAPHNE_COMPILE_JOBS=4` — caps total Ninja concurrency (all targets). This prevents OOM in the non-kernel MLIR/compiler phase.
-- `-e DAPHNE_KERNEL_COMPILE_JOBS=2` — additional finer-grained cap for the extra-heavy kernel translation units.
 - `--no-deps` — the image already has all third-party deps compiled at `/usr/local/`, so skip re-building them.
 - `--installPrefix /usr/local/` — tells DAPHNE's build where to find the pre-baked deps.
 
-## Step 7: what success looks like
+## Step 6: what success looks like
 
-At the end you should see something like:
+You should see the build auto-detect memory near the start:
+
+```
+Memory-constrained host detected (8 GB available)
+Auto-setting COMPILE_JOBS=3, KERNEL_COMPILE_JOBS=3 to prevent OOM
+```
+
+And at the end:
 
 ```
 [161/161] Linking CXX shared library lib/libAllKernels.so
@@ -134,27 +131,27 @@ At the end you should see something like:
 
 No `Killed signal terminated program cc1plus`. No "Killed" in the middle of the log.
 
-Ballpark timings from my verification runs (with `DAPHNE_COMPILE_JOBS=4 DAPHNE_KERNEL_COMPILE_JOBS=2`):
+Ballpark timings:
 
-- **8 GB memory**: ~8-10 min total, peak RAM around 5-6 GB.
-- **4 GB memory, COMPILE_JOBS=2 KERNEL_COMPILE_JOBS=1**: ~15-18 min, peak RAM ~3.8 GB.
+- **8 GB memory**: ~20-25 min total, peak RAM around 5-6 GB.
+- **4 GB memory**: ~30 min, peak RAM ~3.8 GB.
 
 The compiled DAPHNE binary lands in `bin/daphne` on the host (because `/daphne` is bind-mounted).
 
-## Step 8: what to send back
+## Step 7: what to send back
 
 Whether it works or not, the useful things to know are:
 
-1. **Which JOBS values you used** (`DAPHNE_COMPILE_JOBS` and `DAPHNE_KERNEL_COMPILE_JOBS`) and **your Docker VM memory** (from step 2).
-2. **What `--memory=` you passed** to `docker run`.
+1. **Your Docker VM memory** (from step 2) and **what `--memory=` you passed** to `docker run`.
+2. **The auto-detected JOBS values** printed by the build (or "no message appeared").
 3. **Success or failure.** If failure, the last 30 lines of output — especially anything with the words `Killed` or `cc1plus`. Paste as text, not a screenshot.
-4. **Wall clock**, if you noticed it: was it in the same ballpark as step 7?
+4. **Wall clock**, if you noticed it: was it in the same ballpark as step 6?
 5. **Anything weird**: did the build hang, did Docker report memory-related warnings, did the image pull fail?
 
 ## Common gotchas
 
 - **"docker: permission denied" or the daemon can't be reached.** Docker Desktop's WSL Integration isn't enabled for your distro. Go to Docker Desktop Settings → Resources → WSL Integration, toggle your Ubuntu on, restart Docker Desktop.
-- **"OOM even with KERNEL_COMPILE_JOBS=1".** The non-kernel MLIR/compiler targets are OOMing before the kernel phase. Make sure you are also setting `DAPHNE_COMPILE_JOBS` (e.g. `DAPHNE_COMPILE_JOBS=2`). If it still OOMs with both set to `1`, raise `--memory=` to `6g` or bump the WSL VM in `.wslconfig`.
+- **"OOM even with auto-detection".** This should not happen — but if it does, the build will print what values it chose. Try overriding: `-e DAPHNE_COMPILE_JOBS=1 -e DAPHNE_KERNEL_COMPILE_JOBS=1`. If it still OOMs with both at `1`, raise `--memory=` to `6g` or bump the WSL VM in `.wslconfig`.
 - **"The build gets to some kernel and then hangs forever."** More likely a Docker Desktop daemon hang than an OOM. Restart Docker Desktop from the tray icon and retry.
 - **"I want to iterate on DAPHNE afterwards."** For long-term development, running DAPHNE inside Docker on top of WSL is slower per-iteration than running it directly in WSL. This doc is optimized for one-off testing. If you want to develop long-term, ask me — there's a WSL-native path but it needs `./install-ubuntu-packages.sh` and takes 30-90 min for the deps the first time.
 - **"clone permission denied."** The fork is public, no auth needed. If your git is set to force SSH, either `git config --global url."https://github.com/".insteadOf "git@github.com:"` or use the HTTPS URL as shown above.

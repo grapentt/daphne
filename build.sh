@@ -52,6 +52,92 @@ sed_inplace() {
     fi
 }
 
+# Returns the memory available to this process in GB (integer, floor).
+# Priority: cgroup v2 limit → cgroup v1 limit → /proc/meminfo → macOS sysctl → fallback 4.
+# Inside a Docker container with --memory=N, cgroup v2 gives the container limit.
+# On a bare host or WSL 2 with no container limit, /proc/meminfo gives the host RAM.
+get_memory_gb() {
+    local mem_bytes=0
+
+    if [ "$IS_DARWIN" = "1" ]; then
+        local raw
+        raw=$(sysctl -n hw.memsize 2>/dev/null) || raw=0
+        if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -gt 0 ]; then
+            echo $(( raw / 1024 / 1024 / 1024 ))
+        else
+            echo 4
+        fi
+        return
+    fi
+
+    # cgroup v2: walk the cgroup hierarchy, take the minimum non-"max" memory.max
+    local cg_path
+    cg_path=$(awk -F: '/^0:/{print $3; exit}' /proc/self/cgroup 2>/dev/null)
+    if [ -n "$cg_path" ]; then
+        local path="$cg_path" val min_limit=0 mem_max_file
+        while true; do
+            mem_max_file="/sys/fs/cgroup${path}/memory.max"
+            if [ -r "$mem_max_file" ]; then
+                val=$(cat "$mem_max_file" 2>/dev/null)
+                if [ "$val" != "max" ] && [[ "$val" =~ ^[0-9]+$ ]]; then
+                    if [ "$min_limit" -eq 0 ] || [ "$val" -lt "$min_limit" ]; then
+                        min_limit="$val"
+                    fi
+                fi
+            fi
+            [ "$path" = "/" ] || [ -z "$path" ] && break
+            path=$(dirname "$path")
+            [ "$path" = "." ] && break
+        done
+        [ "$min_limit" -gt 0 ] && mem_bytes="$min_limit"
+    fi
+
+    # cgroup v1 fallback (legacy or hybrid kernels)
+    if [ "$mem_bytes" -eq 0 ]; then
+        local v1="/sys/fs/cgroup/memory/memory.limit_in_bytes"
+        if [ -r "$v1" ]; then
+            local v1val
+            v1val=$(cat "$v1" 2>/dev/null)
+            # Sentinel for "unlimited" on v1 is > 1 PB; any real limit is below that
+            if [[ "$v1val" =~ ^[0-9]+$ ]] && [ "$v1val" -gt 0 ] && \
+               [ "$v1val" -lt 1125899906842624 ]; then
+                mem_bytes="$v1val"
+            fi
+        fi
+    fi
+
+    # /proc/meminfo: host RAM (final fallback; not container-aware)
+    if [ "$mem_bytes" -eq 0 ] && [ -r /proc/meminfo ]; then
+        mem_bytes=$(awk '/^MemTotal:/{print $2 * 1024; exit}' /proc/meminfo)
+        mem_bytes="${mem_bytes:-0}"
+    fi
+
+    if ! [[ "$mem_bytes" =~ ^[0-9]+$ ]] || [ "$mem_bytes" -eq 0 ]; then
+        echo 4
+        return
+    fi
+    echo $(( mem_bytes / 1024 / 1024 / 1024 ))
+}
+
+# Returns "compile_jobs kernel_jobs" safe for avail_gb of available RAM.
+# compile_jobs: global Ninja cap (all targets); formula: floor((avail-1)/2), min 1, max nproc.
+# kernel_jobs:  kernel-pool cap (KernelObjLib only); same as compile_jobs since
+#               kernel slots consume a global slot too.
+# Empirical basis: DistributedPipeline.cpp peaks at 3.63 GB, non-kernel MLIR
+# targets at ~1.5 GB, kernel TUs at ~1 GB. 2 GB/slot is safe for the worst pair.
+calc_daphne_jobs() {
+    local avail_gb=$1
+    local ncpu
+    ncpu=$(get_nproc)
+    local usable=$(( avail_gb > 1 ? avail_gb - 1 : 1 ))
+    local cj=$(( usable / 2 ))
+    [ "$cj" -lt 1 ] && cj=1
+    [ "$cj" -gt "$ncpu" ] && cj=$ncpu
+    local kj=$usable
+    [ "$kj" -gt "$cj" ] && kj=$cj
+    echo "$cj $kj"
+}
+
 build_ts_begin=$(date +%s%N)
 
 #******************************************************************************
@@ -1214,17 +1300,30 @@ fi
 daphne_msg "Build Daphne"
 
 DAPHNE_CMAKE_EXTRA=()
-if [ -n "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]; then
-    # Forward the env var to CMake as -DDAPHNE_KERNEL_COMPILE_JOBS=<n>.
-    # Same name as the CMake cache variable; CMake validates the value.
-    DAPHNE_CMAKE_EXTRA+=(-DDAPHNE_KERNEL_COMPILE_JOBS="$DAPHNE_KERNEL_COMPILE_JOBS")
+
+# Auto-detect available memory and set safe build-parallelism defaults.
+# Reads the cgroup v2/v1 memory limit (Docker --memory=) or /proc/meminfo (host RAM).
+# Only activates when memory would be the bottleneck; prints a message in that case.
+# Explicit env-var values always take precedence over the auto-detected defaults.
+if [ -z "${DAPHNE_COMPILE_JOBS:-}" ] || [ -z "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]; then
+    _avail_gb=$(get_memory_gb)
+    read -r _auto_cj _auto_kj <<< "$(calc_daphne_jobs "$_avail_gb")"
+    _nproc=$(get_nproc)
+    if [ "$_auto_cj" -lt "$_nproc" ]; then
+        daphne_msg "Memory-constrained host detected (${_avail_gb} GB available)"
+        daphne_msg "Auto-setting COMPILE_JOBS=${_auto_cj}, KERNEL_COMPILE_JOBS=${_auto_kj} to prevent OOM"
+        daphne_msg "Override by setting DAPHNE_COMPILE_JOBS / DAPHNE_KERNEL_COMPILE_JOBS env vars"
+    fi
+    : "${DAPHNE_COMPILE_JOBS:=$_auto_cj}"
+    : "${DAPHNE_KERNEL_COMPILE_JOBS:=$_auto_kj}"
 fi
 
-# Optional global Ninja job cap passed straight to `cmake --build --parallel`.
-# On memory-constrained hosts (WSL 2, Docker Desktop, containers with --memory)
-# Ninja's default of nproc parallel jobs can OOM the compiler before the kernel
-# job pool (DAPHNE_KERNEL_COMPILE_JOBS) is even reached. Set this to a positive
-# integer to cap *all* compile targets; leave unset for uncapped (default).
+# Forward job counts to their respective build systems.
+# DAPHNE_KERNEL_COMPILE_JOBS → CMake cache variable (Ninja job pool).
+# DAPHNE_COMPILE_JOBS → cmake --build --parallel (global Ninja cap).
+if [ -n "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]; then
+    DAPHNE_CMAKE_EXTRA+=(-DDAPHNE_KERNEL_COMPILE_JOBS="$DAPHNE_KERNEL_COMPILE_JOBS")
+fi
 CMAKE_BUILD_EXTRA=()
 if [ -n "${DAPHNE_COMPILE_JOBS:-}" ]; then
     CMAKE_BUILD_EXTRA+=(--parallel "$DAPHNE_COMPILE_JOBS")
