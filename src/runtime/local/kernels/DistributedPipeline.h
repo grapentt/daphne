@@ -38,9 +38,10 @@ void distributedPipeline(DTRes **outputs, size_t numOutputs, const Structure **i
                          int64_t *outRows, int64_t *outCols, int64_t *splits, int64_t *combines, const char *irCode,
                          DCTX(ctx));
 
-// Only DenseMatrix<double> is used by the CPP kernels library. Declared extern
-// so no TU implicitly instantiates the template from the forward declaration
-// above.
+// The explicit instantiations provided in DistributedPipeline.cpp. The extern
+// template keeps each including TU from instantiating the template again, so it
+// links against the one in the .cpp. checkExplicitInstantiations.py also checks
+// this list against kernels.json at configure time.
 extern template void distributedPipeline<DenseMatrix<double>>(
         DenseMatrix<double> **outputs, size_t numOutputs,
         const Structure **inputs, size_t numInputs,

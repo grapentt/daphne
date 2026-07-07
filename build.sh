@@ -138,8 +138,9 @@ calc_daphne_jobs() {
     local cj=$(( usable / 2 ))
     [ "$cj" -lt 1 ] && cj=1
     [ "$cj" -gt "$ncpu" ] && cj=$ncpu
-    local kj=$usable
-    [ "$kj" -gt "$cj" ] && kj=$cj
+    # Kernel pool never exceeds the global cap (kernel slots consume global
+    # slots too); today both knobs use the same value.
+    local kj=$cj
     echo "$cj $kj"
 }
 

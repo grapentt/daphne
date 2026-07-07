@@ -29,6 +29,7 @@ void distributedPipeline(DTRes **outputs, size_t numOutputs, const Structure **i
                          DCTX(ctx)) {
 
     auto wrapper = std::make_unique<DistributedWrapper<DTRes>>(ctx);
+    // TODO *** -> **
     DTRes ***res = new DTRes **[numOutputs];
     for (size_t i = 0; i < numOutputs; i++)
         res[i] = outputs + i;
