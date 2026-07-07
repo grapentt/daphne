@@ -136,7 +136,7 @@ if(NOT "${DAPHNE_KERNEL_COMPILE_JOBS}" STREQUAL "")
     if(NOT CMAKE_GENERATOR MATCHES "Ninja")
         message(WARNING "DAPHNE_KERNEL_COMPILE_JOBS is set but generator is '${CMAKE_GENERATOR}'. JOB_POOLS is Ninja-only; ignoring.")
     else()
-        set_property(GLOBAL APPEND PROPERTY JOB_POOLS daphne_kernel_compile=${DAPHNE_KERNEL_COMPILE_JOBS})
+        set_property(GLOBAL PROPERTY JOB_POOLS daphne_kernel_compile=${DAPHNE_KERNEL_COMPILE_JOBS})
         # Single flag used by the kernel target definitions to decide whether
         # to attach JOB_POOL_COMPILE. Referencing the pool without registering
         # it makes Ninja fail with "unknown pool name" at build-graph load,
