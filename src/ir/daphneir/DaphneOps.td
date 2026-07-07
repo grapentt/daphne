@@ -418,7 +418,8 @@ class Daphne_OuterBinaryOp<string name, Type scalarType, list<Trait> traits = []
     DataTypeMat,
     NumRowsFromIthArg<0>, NumColsFromIthArg<1>,
     CastArgsToResType,
-    DeclareOpInterfaceMethods<VectorizableOpInterface>
+    DeclareOpInterfaceMethods<VectorizableOpInterface>,
+    Pure
 ])> {
     let arguments = (ins MatrixOf<[scalarType]>:$lhs, MatrixOf<[scalarType]>:$rhs);
     let results = (outs MatrixOf<[scalarType]>:$res);
@@ -493,7 +494,8 @@ def Daphne_CondOp : Daphne_Op<"cond", [
 // Aggregation and statistical
 // ****************************************************************************
 
-class Daphne_AggOp<string name, Type inScalarType, list<Trait> traits = []> : Daphne_Op<name, traits> {
+class Daphne_AggOp<string name, Type inScalarType, list<Trait> traits = []>
+: Daphne_Op<name, !listconcat(traits, [Pure])> {
     let arguments = (ins MatrixOf<[inScalarType]>:$arg);
 }
 
@@ -585,7 +587,8 @@ def Daphne_CumAggMaxOp  : Daphne_CumAggOp<"maxCum" , AnyScalar, [ValueTypeFromFi
 class Daphne_GrpAggOp<string name, Type scalarType, list<Trait> traits = []>
 : Daphne_Op<name, !listconcat(traits, [
     DataTypeMat,
-    NumRowsFromIthScalar<2>, NumColsFromArg
+    NumRowsFromIthScalar<2>, NumColsFromArg,
+    Pure
 ])> {
     let arguments = (ins MatrixOf<[scalarType]>:$arg, MatrixOf<[Size]>:$groupIds, Size:$numGroups/*, Optional<MatrixOrU>:$weights*/);
     let results = (outs MatrixOf<[scalarType]>:$groupAggs);
