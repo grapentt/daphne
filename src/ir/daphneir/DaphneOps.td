@@ -777,7 +777,8 @@ def Daphne_TransposeOp : Daphne_Op<"transpose", [
 
 class Daphne_BindOp<string name, list<Trait> traits = []> : Daphne_Op<name, !listconcat(traits, [
     DataTypeFromArgs,
-    CastArgsToResType
+    CastArgsToResType,
+    Pure
 ])> {
     let arguments = (ins MatrixOrFrame:$lhs, MatrixOrFrame:$rhs);
     let results = (outs MatrixOrFrame:$res);
@@ -787,8 +788,7 @@ def Daphne_ColBindOp : Daphne_BindOp<"colBind", [
     ValueTypesConcat,
     DeclareOpInterfaceMethods<InferFrameLabelsOpInterface>,
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
-    NumRowsFromAllArgs, NumColsFromSumOfAllArgs, CUDASupport,
-    Pure
+    NumRowsFromAllArgs, NumColsFromSumOfAllArgs, CUDASupport
 ]>;
 
 def Daphne_RowBindOp : Daphne_BindOp<"rowBind", [
@@ -851,7 +851,7 @@ def Daphne_SvdOp : Daphne_Op<"svd"> {
 // ----------------------------------------------------------------------------
 
 class Daphne_ActivationForwardOp<string name, list<Trait> traits = []> :
-        Daphne_Op<name, traits> {
+        Daphne_Op<name, !listconcat(traits, [Pure])> {
     let arguments = (ins  MatrixOf<[FloatScalar]>:$input);
 
     let results = (outs MatrixOf<[FloatScalar]>:$data);
@@ -956,7 +956,7 @@ def Daphne_Conv2DBackwardDataOp : Daphne_Op<"conv2DBackwardData"> {
 // Pooling
 // ----------------------------------------------------------------------------
 
-class Daphne_PoolForwardOp<string name, list<Trait> traits = []> : Daphne_Op<name, traits> {
+class Daphne_PoolForwardOp<string name, list<Trait> traits = []> : Daphne_Op<name, !listconcat(traits, [Pure])> {
     let arguments = (ins  MatrixOf<[FloatScalar]>:$input,
         // input shape (NCHW)
         Size:$inputBatchSize, Size:$inputNumChannels, Size:$inputHeight, Size:$inputWidth,
@@ -1318,7 +1318,7 @@ def Daphne_GroupOp : Daphne_Op<"group", [
 
 class Daphne_ColSelectCmpOp<string name, list<Trait> traits = []>
 : Daphne_Op<name, !listconcat(traits, [
-    DataTypeCol, ValueTypeSize
+    DataTypeCol, ValueTypeSize, Pure
 ])> {
     let summary = "Selection on columnar data; input: data; output: sorted positions.";
     let description = [{
@@ -1358,7 +1358,7 @@ def Daphne_ColProjectOp : Daphne_Op<"colProject", [
 
 class Daphne_ColSetOp<string name, list<Trait> traits = []>
 : Daphne_Op<name, !listconcat(traits, [
-    DataTypeCol, ValueTypeSize
+    DataTypeCol, ValueTypeSize, Pure
 ])> {
     let arguments = (ins ColumnOrU:$lhsPos, ColumnOrU:$rhsPos);
     let results = (outs ColumnOrU:$resPos);
@@ -1444,7 +1444,7 @@ def Daphne_ColGroupNextOp : Daphne_Op<"colGroupNext", [
 
 class Daphne_ColCalcBinaryOp<string name, list<Trait> traits = []>
 : Daphne_Op<name, !listconcat(traits, [
-    DataTypeCol, ValueTypeFromArgs
+    DataTypeCol, ValueTypeFromArgs, Pure
 ])> {
     let summary = "Elementwise binary operation on columnar data; input: data; output: data.";
     let description = [{
@@ -1461,7 +1461,7 @@ def Daphne_ColCalcMulOp : Daphne_ColCalcBinaryOp<"colCalcMul">;
 
 class Daphne_ColAllAggOp<string name, list<Trait> traits = []>
 : Daphne_Op<name, !listconcat(traits, [
-    DataTypeCol, ValueTypeFromFirstArg
+    DataTypeCol, ValueTypeFromFirstArg, Pure
 ])> {
     let summary = "Full aggregation of columnar data; input: data; output: data.";
     let description = [{
@@ -1476,7 +1476,7 @@ def Daphne_ColAllAggSumOp : Daphne_ColAllAggOp<"colSumAll">;
 
 class Daphne_ColGrpAggOp<string name, list<Trait> traits = []>
 : Daphne_Op<name, !listconcat(traits, [
-    DataTypeCol, ValueTypeFromFirstArg
+    DataTypeCol, ValueTypeFromFirstArg, Pure
 ])> {
     let summary = "Grouped aggregation of columnar data; input: data, positions (group ids); output: data.";
     let description = [{
