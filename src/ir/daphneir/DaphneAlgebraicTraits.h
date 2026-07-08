@@ -38,6 +38,20 @@ class IdentityOnIntegerElementType : public TraitBase<ConcreteOp, IdentityOnInte
 
 template <class ConcreteOp> class IdentityWhenSymmetric : public TraitBase<ConcreteOp, IdentityWhenSymmetric> {};
 
+template <class ConcreteOp> class NeutralOnZeroRHS : public TraitBase<ConcreteOp, NeutralOnZeroRHS> {};
+
+template <class ConcreteOp> class NeutralOnOneRHS : public TraitBase<ConcreteOp, NeutralOnOneRHS> {};
+
+template <class ConcreteOp> class LeftAbsorbingOnZero : public TraitBase<ConcreteOp, LeftAbsorbingOnZero> {};
+
+template <class ConcreteOp> class RightAbsorbingOnZero : public TraitBase<ConcreteOp, RightAbsorbingOnZero> {};
+
+template <class ConcreteOp>
+class IdentityOnSingletonRowDim : public TraitBase<ConcreteOp, IdentityOnSingletonRowDim> {};
+
+template <class ConcreteOp>
+class IdentityOnSingletonColDim : public TraitBase<ConcreteOp, IdentityOnSingletonColDim> {};
+
 } // namespace mlir::OpTrait
 
 #endif // SRC_IR_DAPHNEIR_DAPHNEALGEBRAICTRAITS_H

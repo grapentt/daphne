@@ -45,4 +45,30 @@ def IdentityOnIntegerElementType : NativeOpTrait<"IdentityOnIntegerElementType">
 // f(X) = X when X's inferred symmetric property is true.
 def IdentityWhenSymmetric : NativeOpTrait<"IdentityWhenSymmetric">;
 
+// ****************************************************************************
+// Parametric algebraic traits (enumerated)
+// ****************************************************************************
+
+// Enumerated rather than TableGen-parametric: the constant K and operand
+// position i cover only two small cardinalities in practice, so five discrete
+// defs beat one ParamNativeOpTrait that would need runtime attribute parsing.
+
+// f(x, 0) = x.
+def NeutralOnZeroRHS : NativeOpTrait<"NeutralOnZeroRHS">;
+
+// f(x, 1) = x.
+def NeutralOnOneRHS : NativeOpTrait<"NeutralOnOneRHS">;
+
+// f(0, x) = 0.
+def LeftAbsorbingOnZero : NativeOpTrait<"LeftAbsorbingOnZero">;
+
+// f(x, 0) = 0.
+def RightAbsorbingOnZero : NativeOpTrait<"RightAbsorbingOnZero">;
+
+// f(X) = X when X's row dimension is statically 1.
+def IdentityOnSingletonRowDim : NativeOpTrait<"IdentityOnSingletonRowDim">;
+
+// f(X) = X when X's column dimension is statically 1.
+def IdentityOnSingletonColDim : NativeOpTrait<"IdentityOnSingletonColDim">;
+
 #endif // SRC_IR_DAPHNEIR_DAPHNEALGEBRAICTRAITS_TD

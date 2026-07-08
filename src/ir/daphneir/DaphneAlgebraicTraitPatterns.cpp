@@ -18,6 +18,8 @@
 
 #include "ir/daphneir/Daphne.h"
 
+#include "mlir/IR/Matchers.h"
+
 using namespace mlir;
 
 namespace {
@@ -28,6 +30,14 @@ static Type getMatrixElementTypeOrNull(Value v) {
         return mt.getElementType();
     return {};
 }
+
+// Returns true when `v` is a ConstantLike op whose scalar value is zero.
+static bool isConstantZero(Value v) {
+    return matchPattern(v, m_Zero()) || matchPattern(v, m_AnyZeroFloat());
+}
+
+// Returns true when `v` is a ConstantLike op whose scalar value is one.
+static bool isConstantOne(Value v) { return matchPattern(v, m_One()) || matchPattern(v, m_OneFloat()); }
 
 /**
  * @brief Collapses `f(f(x))` to `x` for any op tagged `Involutive`.
@@ -184,6 +194,151 @@ struct IdentityWhenSymmetricPattern : public RewritePattern {
     }
 };
 
+/**
+ * @brief Replaces `f(x, 0)` with `x` for any op tagged `NeutralOnZeroRHS`.
+ */
+struct NeutralOnZeroRHSPattern : public RewritePattern {
+    NeutralOnZeroRHSPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::NeutralOnZeroRHS>())
+            return failure();
+        if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+            return failure();
+        if (!isConstantZero(op->getOperand(1)))
+            return failure();
+
+        Value lhs = op->getOperand(0);
+        if (lhs.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, lhs);
+        return success();
+    }
+};
+
+/**
+ * @brief Replaces `f(x, 1)` with `x` for any op tagged `NeutralOnOneRHS`.
+ */
+struct NeutralOnOneRHSPattern : public RewritePattern {
+    NeutralOnOneRHSPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::NeutralOnOneRHS>())
+            return failure();
+        if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+            return failure();
+        if (!isConstantOne(op->getOperand(1)))
+            return failure();
+
+        Value lhs = op->getOperand(0);
+        if (lhs.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, lhs);
+        return success();
+    }
+};
+
+/**
+ * @brief Replaces `f(0, x)` with `0` for any op tagged `LeftAbsorbingOnZero`.
+ *
+ * Fires only when the zero operand's type equals the op's result type, so
+ * broadcasting cases (scalar zero * matrix) do not accidentally shrink the
+ * result to a scalar.
+ */
+struct LeftAbsorbingOnZeroPattern : public RewritePattern {
+    LeftAbsorbingOnZeroPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::LeftAbsorbingOnZero>())
+            return failure();
+        if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+            return failure();
+        Value zero = op->getOperand(0);
+        if (!isConstantZero(zero))
+            return failure();
+        if (zero.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, zero);
+        return success();
+    }
+};
+
+/**
+ * @brief Replaces `f(x, 0)` with `0` for any op tagged `RightAbsorbingOnZero`.
+ */
+struct RightAbsorbingOnZeroPattern : public RewritePattern {
+    RightAbsorbingOnZeroPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::RightAbsorbingOnZero>())
+            return failure();
+        if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+            return failure();
+        Value zero = op->getOperand(1);
+        if (!isConstantZero(zero))
+            return failure();
+        if (zero.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, zero);
+        return success();
+    }
+};
+
+/**
+ * @brief Replaces `f(X)` with `X` when X's row dimension is statically 1.
+ *
+ * Bails on unknown row dimension so the rewrite stays sound under imprecise
+ * shape inference.
+ */
+struct IdentityOnSingletonRowDimPattern : public RewritePattern {
+    IdentityOnSingletonRowDimPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::IdentityOnSingletonRowDim>())
+            return failure();
+        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+            return failure();
+
+        Value operand = op->getOperand(0);
+        auto mt = llvm::dyn_cast<daphne::MatrixType>(operand.getType());
+        if (!mt || mt.getNumRows() != 1)
+            return failure();
+        if (operand.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, operand);
+        return success();
+    }
+};
+
+/**
+ * @brief Replaces `f(X)` with `X` when X's column dimension is statically 1.
+ */
+struct IdentityOnSingletonColDimPattern : public RewritePattern {
+    IdentityOnSingletonColDimPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::IdentityOnSingletonColDim>())
+            return failure();
+        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+            return failure();
+
+        Value operand = op->getOperand(0);
+        auto mt = llvm::dyn_cast<daphne::MatrixType>(operand.getType());
+        if (!mt || mt.getNumCols() != 1)
+            return failure();
+        if (operand.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, operand);
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::daphne {
@@ -191,7 +346,9 @@ namespace mlir::daphne {
 void populateAlgebraicTraitPatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
     patterns.add<InvolutivePattern, IdempotentUnaryPattern, IdempotentBinaryPattern, IdempotentOnSelfPattern,
-                 IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern>(ctx);
+                 IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern, NeutralOnZeroRHSPattern,
+                 NeutralOnOneRHSPattern, LeftAbsorbingOnZeroPattern, RightAbsorbingOnZeroPattern,
+                 IdentityOnSingletonRowDimPattern, IdentityOnSingletonColDimPattern>(ctx);
 }
 
 } // namespace mlir::daphne
