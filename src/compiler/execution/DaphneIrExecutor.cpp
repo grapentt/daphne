@@ -159,11 +159,11 @@ bool DaphneIrExecutor::runPasses(mlir::ModuleOp module) {
         pm.addNestedPass<mlir::func::FuncOp>(mlir::daphne::createInferencePass());
         // Simplify the IR.
         pm.addPass(mlir::createCanonicalizerPass());
-        // Remove unused ops after simplifications.
-        // TODO The CSE pass seems to eliminate only "one row" of dead code at a time, so we need it as many times as
-        // the longest chain of ops we reduce; how to apply CSE until a fixpoint?
-        for (size_t i = 0; i < 5; i++)
-            pm.addPass(mlir::createCSEPass());
+        // Remove unused ops exposed by the columnar rewrite and canonicalization.
+        // One CSE pass is sufficient: MLIR's CSE walks the dominance tree once
+        // and hashes (op-name, operands, attributes, result-types), so pure ops
+        // are canonicalized in a single visit.
+        pm.addPass(mlir::createCSEPass());
     }
     if (userConfig_.explain_columnar)
         pm.addPass(mlir::daphne::createPrintIRPass("IR after lowering to columnar ops:"));
@@ -318,6 +318,9 @@ void DaphneIrExecutor::buildCodegenPipeline(mlir::PassManager &pm) {
     // pm.addPass(mlir::daphne::createPrintIRPass("IR after createConvertDaphneToLinalgPass"));
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgGeneralizeNamedOpsPass());
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgElementwiseOpFusionPass());
+    // Elementwise fusion often exposes duplicate memref/tensor ops that are
+    // eligible for CSE now that the surrounding ops carry the Pure trait.
+    pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
     // pm.addPass(mlir::daphne::createPrintIRPass("IR after LinalgPasses"));
 
     auto bufOpts = mlir::getBufferizationOptionsForSparsification(/*analysisOnly=*/false);
@@ -334,6 +337,9 @@ void DaphneIrExecutor::buildCodegenPipeline(mlir::PassManager &pm) {
     // pm.addPass(mlir::createSparsificationAndBufferizationPass());
     pm.addPass(mlir::createStorageSpecifierToLLVMPass());
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createCanonicalizerPass());
+    // Canonicalization can expose further duplicates; run CSE once more so the
+    // subsequent lowering sees the smallest possible IR.
+    pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
 
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createConvertLinalgToLoopsPass());
     pm.addNestedPass<mlir::func::FuncOp>(mlir::memref::createExpandReallocPass());
