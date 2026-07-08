@@ -199,7 +199,7 @@ def Daphne_SeqOp : Daphne_Op<"seq", [
 // Matrix/frame meta data
 // ****************************************************************************
 
-def Daphne_TypeOfOp : Daphne_Op<"typeOf"> {
+def Daphne_TypeOfOp : Daphne_Op<"typeOf", [Pure]> {
     let arguments = (ins AnyTypeOf<[AnyScalar, MatrixOrFrame]>:$arg);
     let results = (outs StrScalar:$res);
 }
@@ -217,14 +217,14 @@ def Daphne_NumRowsOp : Daphne_NumOp<"numRows">;
 def Daphne_NumColsOp : Daphne_NumOp<"numCols">;
 def Daphne_NumCellsOp : Daphne_NumOp<"numCells">;
 
-def Daphne_SparsityOp : Daphne_Op<"sparsity", [DataTypeSca]> {
+def Daphne_SparsityOp : Daphne_Op<"sparsity", [DataTypeSca, Pure]> {
   let arguments = (ins MatrixOf<[AnyScalar]>:$arg);
   let results = (outs FloatScalar:$res);
 
   let hasCanonicalizeMethod = 1;
 }
 
-def Daphne_IsSymmetricOp : Daphne_Op<"isSymmetric"> {
+def Daphne_IsSymmetricOp : Daphne_Op<"isSymmetric", [Pure]> {
     let summary = "Checks if a matrix is symmetric";
     let description = [{
         This operation checks if the input matrix is symmetric.
@@ -752,7 +752,7 @@ def Daphne_InsertColOp : Daphne_Op<"insertCol", [
 
 def Daphne_ReshapeOp : Daphne_Op<"reshape", [
     TypeFromFirstArg,
-    NumRowsFromIthScalar<1>, NumColsFromIthScalar<2>, SparsityFromArg
+    NumRowsFromIthScalar<1>, NumColsFromIthScalar<2>, SparsityFromArg, Pure
 ]> {
     let arguments = (ins MatrixOrU:$arg, Size:$numRows, Size:$numCols);
     let results = (outs MatrixOrU:$res);
@@ -798,7 +798,7 @@ def Daphne_RowBindOp : Daphne_BindOp<"rowBind", [
 ]>;
 
 def Daphne_ReverseOp : Daphne_Op<"reverse", [
-    TypeFromFirstArg, ShapeFromArg
+    TypeFromFirstArg, ShapeFromArg, Pure
 ]> {
     let arguments = (ins MatrixOrU:$arg);
     let results = (outs MatrixOrU:$res);
@@ -808,7 +808,7 @@ def Daphne_OrderOp : Daphne_Op<"order", [
     DeclareOpInterfaceMethods<InferFrameLabelsOpInterface>,
     DeclareOpInterfaceMethods<InferTypesOpInterface>, // due to possibility of returning indexes
     SameVariadicOperandSize,
-    DeclareOpInterfaceMethods<InferShapeOpInterface>
+    DeclareOpInterfaceMethods<InferShapeOpInterface>, Pure
 ]> {
     // TODO Maybe colIdxs and ascs should be attributes.
     let arguments = (ins MatrixOrFrame:$arg, Variadic<Size>:$colIdxs, Variadic<BoolScalar>:$ascs, BoolScalar:$returnIdxs);
@@ -918,7 +918,7 @@ def Daphne_BiasAddOp : Daphne_Op<"BiasAdd", [ ValueTypeFromFirstArg, DataTypeFro
 
 def Daphne_Conv2DForwardOp : Daphne_Op<"Convolution_Forward",
     [ DeclareOpInterfaceMethods<InferTypesOpInterface>, DeclareOpInterfaceMethods<InferShapeOpInterface>,
-      CUDASupport ]> {
+      CUDASupport, Pure ]> {
     let arguments = (ins
         MatrixOf<[FloatScalar]>:$input, MatrixOf<[FloatScalar]>:$filter, MatrixOf<[FloatScalar]>:$bias,
         // input shape
@@ -1000,7 +1000,7 @@ def Daphne_MaxPoolBackwardOp : Daphne_Op<"maxPoolBackward", [ CUDASupport ]> {
 // ----------------------------------------------------------------------------
 // Softmax
 // ----------------------------------------------------------------------------
-def Daphne_SoftmaxOp : Daphne_Op<"Softmax", [ DataTypeFromFirstArg, ValueTypeFromFirstArg, CUDASupport ]> {
+def Daphne_SoftmaxOp : Daphne_Op<"Softmax", [ DataTypeFromFirstArg, ValueTypeFromFirstArg, CUDASupport, Pure ]> {
     let arguments = (ins  MatrixOf<[FloatScalar]>:$input);
 
     let results = (outs MatrixOf<[FloatScalar]>:$data);
