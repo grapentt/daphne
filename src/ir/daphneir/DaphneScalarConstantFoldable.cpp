@@ -148,11 +148,13 @@ static Attribute foldScalarCmpBinary(ScalarConstantFoldable op, Attribute lhs, A
         auto [l, r] = promoteWidth(llvm::cast<IntegerAttr>(lhs), llvm::cast<IntegerAttr>(rhs), loc);
         Type argTy = l.getType();
         // Comparison signedness follows the *input* type, unlike arithmetic
-        // where the result type carries it.
+        // where the result type carries it. Signless / index inputs are not
+        // folded — matches the legacy Fold.cpp templates which keyed off
+        // isSignedInteger() / isUnsignedInteger() explicitly.
         if (auto intTy = llvm::dyn_cast<IntegerType>(argTy); intTy && intTy.isUnsigned()) {
             if (auto v = op.foldScalarCmpUInt(l.getValue(), r.getValue()))
                 return IntegerAttr::getChecked(loc, resultType, *v);
-        } else {
+        } else if (auto intTy = llvm::dyn_cast<IntegerType>(argTy); intTy && intTy.isSigned()) {
             if (auto v = op.foldScalarCmpSInt(l.getValue(), r.getValue()))
                 return IntegerAttr::getChecked(loc, resultType, *v);
         }

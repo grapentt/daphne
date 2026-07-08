@@ -270,7 +270,7 @@ class Daphne_EwUnaryOp<string name, Type scalarType, list<Trait> traits = []> : 
 // ----------------------------------------------------------------------------
 
 // TODO EwMinusOp: Should an unsigned integer argument yield a signed integer result?
-def Daphne_EwMinusOp : Daphne_EwUnaryOp<"ewMinus", NumScalar, [ValueTypeFromFirstArg]> {
+def Daphne_EwMinusOp : Daphne_EwUnaryOp<"ewMinus", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarUnaryFloat", "foldScalarUnaryInt"]>]> {
    let hasFolder = 1;
    let hasCanonicalizeMethod = 1;
 }
@@ -350,28 +350,28 @@ class Daphne_EwBinaryOp<string name, Type scalarType, list<Trait> traits = []>
 // ----------------------------------------------------------------------------
 
 // TODO Make EwAddOp Commutative again (see #449).
-def Daphne_EwAddOp    : Daphne_EwBinaryOp<"ewAdd", AnyScalar, [ValueTypeFromArgs, CastArgsToResType/*, Commutative*/, EwSparseIfBoth, CUDASupport]> {
+def Daphne_EwAddOp    : Daphne_EwBinaryOp<"ewAdd", AnyScalar, [ValueTypeFromArgs, CastArgsToResType/*, Commutative*/, EwSparseIfBoth, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
     let hasCanonicalizeMethod = 1;
 }
-def Daphne_EwSubOp    : Daphne_EwBinaryOp<"ewSub", NumScalar, [ValueTypeFromArgs, CastArgsToResType, EwSparseIfBoth, CUDASupport]> {
+def Daphne_EwSubOp    : Daphne_EwBinaryOp<"ewSub", NumScalar, [ValueTypeFromArgs, CastArgsToResType, EwSparseIfBoth, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
     let hasCanonicalizeMethod = 1;
 }
-def Daphne_EwMulOp    : Daphne_EwBinaryOp<"ewMul", NumScalar, [ValueTypeFromArgs, CastArgsToResType, Commutative, EwSparseIfEither, CUDASupport]> {
+def Daphne_EwMulOp    : Daphne_EwBinaryOp<"ewMul", NumScalar, [ValueTypeFromArgs, CastArgsToResType, Commutative, EwSparseIfEither, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
     let hasCanonicalizeMethod = 1;
 }
-def Daphne_EwDivOp    : Daphne_EwBinaryOp<"ewDiv", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport]> {
+def Daphne_EwDivOp    : Daphne_EwBinaryOp<"ewDiv", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
     let hasCanonicalizeMethod = 1;
 }
-def Daphne_EwPowOp    : Daphne_EwBinaryOp<"ewPow", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport]>;
+def Daphne_EwPowOp    : Daphne_EwBinaryOp<"ewPow", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat"]>]>;
 def Daphne_EwModOp    : Daphne_EwBinaryOp<"ewMod", NumScalar, [ValueTypeFromArgs, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarSInt", "foldScalarUInt"]>]>;
-def Daphne_EwLogOp    : Daphne_EwBinaryOp<"ewLog", NumScalar, [ValueTypeFromArgsFP, CastArgsToResType]>;
+def Daphne_EwLogOp    : Daphne_EwBinaryOp<"ewLog", NumScalar, [ValueTypeFromArgsFP, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat"]>]>;
 
 // ----------------------------------------------------------------------------
 // Min/max
 // ----------------------------------------------------------------------------
 
-def Daphne_EwMinOp    : Daphne_EwBinaryOp<"ewMin", AnyScalar, [ValueTypeFromArgs, CastArgsToResType, Commutative]>;
-def Daphne_EwMaxOp    : Daphne_EwBinaryOp<"ewMax", AnyScalar, [ValueTypeFromArgs, CastArgsToResType, Commutative, CUDASupport]>;
+def Daphne_EwMinOp    : Daphne_EwBinaryOp<"ewMin", AnyScalar, [ValueTypeFromArgs, CastArgsToResType, Commutative, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]>;
+def Daphne_EwMaxOp    : Daphne_EwBinaryOp<"ewMax", AnyScalar, [ValueTypeFromArgs, CastArgsToResType, Commutative, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]>;
 
 // ----------------------------------------------------------------------------
 // Logical
@@ -404,12 +404,12 @@ class Daphne_EwCmpOp<string name, Type inputScalarType, list<Trait> traits = []>
     //let results = (outs AnyTypeOf<[MatrixOf<[BoolScalar]>, BoolScalar, Unknown]>:$res);
 }
 
-def Daphne_EwEqOp  : Daphne_EwCmpOp<"ewEq" , AnyScalar, [Commutative]>;
-def Daphne_EwNeqOp : Daphne_EwCmpOp<"ewNeq", AnyScalar, [Commutative, CUDASupport]>;
-def Daphne_EwLtOp  : Daphne_EwCmpOp<"ewLt" , AnyScalar>;
-def Daphne_EwLeOp  : Daphne_EwCmpOp<"ewLe" , AnyScalar>;
-def Daphne_EwGtOp  : Daphne_EwCmpOp<"ewGt" , AnyScalar>;
-def Daphne_EwGeOp  : Daphne_EwCmpOp<"ewGe" , AnyScalar>;
+def Daphne_EwEqOp  : Daphne_EwCmpOp<"ewEq" , AnyScalar, [Commutative, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
+def Daphne_EwNeqOp : Daphne_EwCmpOp<"ewNeq", AnyScalar, [Commutative, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
+def Daphne_EwLtOp  : Daphne_EwCmpOp<"ewLt" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
+def Daphne_EwLeOp  : Daphne_EwCmpOp<"ewLe" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
+def Daphne_EwGtOp  : Daphne_EwCmpOp<"ewGt" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
+def Daphne_EwGeOp  : Daphne_EwCmpOp<"ewGe" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
 
 // ****************************************************************************
 // Outer binary (generalized outer product)
