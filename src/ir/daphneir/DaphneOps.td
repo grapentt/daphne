@@ -161,7 +161,8 @@ def Daphne_CreateFrameOp : Daphne_Op<"createFrame", [
 def Daphne_DiagMatrixOp : Daphne_Op<"diagMatrix", [
     TypeFromFirstArg,
     NumRowsFromArg, NumColsFromArgNumRows,
-    DeclareOpInterfaceMethods<InferSparsityOpInterface>
+    DeclareOpInterfaceMethods<InferSparsityOpInterface>,
+    Pure
 ]> {
     let arguments = (ins MatrixOrU:$arg);
     let results = (outs MatrixOrU:$res);
@@ -819,7 +820,7 @@ def Daphne_OrderOp : Daphne_Op<"order", [
 // ****************************************************************************
 
 def Daphne_EigenOp : Daphne_Op<"eigenCal", [TypeFromFirstArg, DeclareOpInterfaceMethods<InferTypesOpInterface>,
-        DeclareOpInterfaceMethods<InferShapeOpInterface>]> {
+        DeclareOpInterfaceMethods<InferShapeOpInterface>, Pure]> {
     let arguments = (ins MatrixOf<[FloatScalar]>:$arg);
     let results = (outs MatrixOf<[FloatScalar]>:$eigenValues, MatrixOf<[FloatScalar]>:$eigenVectors);
 }
@@ -1024,7 +1025,7 @@ def Daphne_TriOp : Daphne_Op<"tri", [
 }
 
 def Daphne_SolveOp : Daphne_Op<"solve", [
-    DataTypeMat, ValueTypeFromArgs, NumRowsFromArg, OneCol, CUDASupport, CastArgsToResType
+    DataTypeMat, ValueTypeFromArgs, NumRowsFromArg, OneCol, CUDASupport, CastArgsToResType, Pure
 ]> {
     let arguments = (ins MatrixOf<[NumScalar]>:$a, MatrixOf<[NumScalar]>:$b);
     let results = (outs MatrixOf<[NumScalar]>:$x);
@@ -1048,8 +1049,8 @@ def Daphne_CTableOp : Daphne_Op<"ctable", [
 def Daphne_SyrkOp : Daphne_Op<"syrk", [
     TypeFromFirstArg,
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
-    NumRowsFromArgNumCols, NumColsFromArg, CUDASupport,FPGAOPENCLSupport, 
-    CastFirstArgToResType
+    NumRowsFromArgNumCols, NumColsFromArg, CUDASupport,FPGAOPENCLSupport,
+    CastFirstArgToResType, Pure
 ]> {
     let summary = [{Performs the operation `t(A) @ A` if `transLeft` is `true`; or `A @ t(A)`, otherwise.}];
     let arguments = (ins MatrixOrU:$arg, BoolScalar:$transLeft);
@@ -1060,7 +1061,7 @@ def Daphne_GemvOp : Daphne_Op<"gemv", [
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
     DataTypeMat, ValueTypeFromArgs,
     NumRowsFromArgNumCols, OneCol, CUDASupport,
-    CastArgsToResType
+    CastArgsToResType, Pure
 ]> {
     // TODO: support `A @ x` operation
     let summary = [{Performs the operation `t(A) @ x`}];
