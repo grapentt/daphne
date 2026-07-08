@@ -33,6 +33,7 @@ include "ir/daphneir/DaphneInferTypesTraits.td"
 include "ir/daphneir/DaphneVectorizableOpInterface.td"
 include "ir/daphneir/DaphneScalarConstantFoldable.td"
 include "ir/daphneir/DaphneTypeAdaptationTraits.td"
+include "ir/daphneir/DaphneAlgebraicTraits.td"
 include "ir/daphneir/CUDASupport.td"
 include "ir/daphneir/FPGAOPENCLSupport.td"
 
