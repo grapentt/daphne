@@ -145,6 +145,7 @@ bool DaphneIrExecutor::runPasses(mlir::ModuleOp module) {
     // run only three iterations of both passes (see #173).
     pm.addNestedPass<mlir::func::FuncOp>(mlir::daphne::createInferencePass());
     pm.addPass(mlir::createCanonicalizerPass());
+    pm.addPass(mlir::daphne::createAlgebraicSimplifyPass());
 
     if (userConfig_.enable_property_recording)
         pm.addPass(mlir::daphne::createRecordPropertiesPass());
