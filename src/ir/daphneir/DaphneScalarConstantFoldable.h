@@ -17,13 +17,15 @@
 #ifndef SRC_IR_DAPHNEIR_DAPHNESCALARCONSTANTFOLDABLE_H
 #define SRC_IR_DAPHNEIR_DAPHNESCALARCONSTANTFOLDABLE_H
 
-#include "ir/daphneir/Daphne.h"
-
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+
+#include <optional>
 
 namespace mlir::daphne {
 #include <ir/daphneir/DaphneScalarConstantFoldable.h.inc>
@@ -38,7 +40,7 @@ namespace mlir::daphne {
  * The driver walks numeric kinds in the same precedence order the legacy
  * per-op templates used (float, then signed int, unsigned int, bool) and returns
  * the first non-empty result. If none of the kinds apply, a null Attribute is
- * returned — the caller should propagate that as "no folding possible".
+ * returned, which the caller should propagate as "no folding possible".
  *
  * Arity is inferred from `operands.size()`; the driver dispatches to the
  * unary or binary methods accordingly. Comparison-flavoured ops (numeric in,

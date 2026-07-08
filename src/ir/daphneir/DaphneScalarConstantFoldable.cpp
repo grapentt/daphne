@@ -108,6 +108,15 @@ static Attribute foldScalarArithBinary(ScalarConstantFoldable op, Attribute lhs,
         if (auto v = op.foldScalarFloat(l.getValue(), r.getValue()))
             return FloatAttr::getChecked(loc, resultType, *v);
     }
+    // BoolAttr checked before IntegerAttr: MLIR's BoolAttr is-a IntegerAttr of
+    // type i1, so `isa<IntegerAttr>` matches bool pairs too. Dispatch to the
+    // bool method first to preserve the legacy fold order.
+    if (isBoolAttrPair(lhs, rhs)) {
+        auto l = llvm::cast<BoolAttr>(lhs).getValue();
+        auto r = llvm::cast<BoolAttr>(rhs).getValue();
+        if (auto v = op.foldScalarBool(l, r))
+            return BoolAttr::get(op->getContext(), *v);
+    }
     if (isIntAttrPair(lhs, rhs)) {
         auto [l, r] = promoteWidth(llvm::cast<IntegerAttr>(lhs), llvm::cast<IntegerAttr>(rhs), loc);
         // Precedence matches the legacy signedness dispatch in Fold.cpp.
@@ -117,19 +126,9 @@ static Attribute foldScalarArithBinary(ScalarConstantFoldable op, Attribute lhs,
         } else if (auto intTy = llvm::dyn_cast<IntegerType>(resultType); intTy && intTy.isUnsigned()) {
             if (auto v = op.foldScalarUInt(l.getValue(), r.getValue()))
                 return IntegerAttr::getChecked(loc, resultType, *v);
-        } else {
-            // Signless or Index — try signed first (matches how existing folders behave).
-            if (auto v = op.foldScalarSInt(l.getValue(), r.getValue()))
-                return IntegerAttr::getChecked(loc, resultType, *v);
-            if (auto v = op.foldScalarUInt(l.getValue(), r.getValue()))
-                return IntegerAttr::getChecked(loc, resultType, *v);
         }
-    }
-    if (isBoolAttrPair(lhs, rhs)) {
-        auto l = llvm::cast<BoolAttr>(lhs).getValue();
-        auto r = llvm::cast<BoolAttr>(rhs).getValue();
-        if (auto v = op.foldScalarBool(l, r))
-            return BoolAttr::get(op->getContext(), *v);
+        // Signless / Index intentionally not folded — matches the legacy
+        // Fold.cpp templates, which key off isSignedInteger()/isUnsignedInteger().
     }
     return {};
 }
@@ -178,8 +177,11 @@ Attribute foldScalarOp(ScalarConstantFoldable op, ArrayRef<Attribute> operands, 
     if (!operands[0] || !operands[1])
         return {};
 
-    // A result type of `i1` marks a comparison op; everything else is arithmetic.
-    const bool isCmp = resultType.isSignlessInteger(1);
+    // Dispatch heuristic: an i1 result usually means a comparison (numeric in,
+    // bool out), but bool-typed logical ops (EwAndOp/EwOrOp/EwXorOp on `bool`
+    // operands) also produce i1. Both-bool-operand pairs go through the
+    // arithmetic path so the op's `foldScalarBool` gets called.
+    const bool isCmp = resultType.isSignlessInteger(1) && !isBoolAttrPair(operands[0], operands[1]);
     return isCmp ? foldScalarCmpBinary(op, operands[0], operands[1], resultType, loc)
                  : foldScalarArithBinary(op, operands[0], operands[1], resultType, loc);
 }

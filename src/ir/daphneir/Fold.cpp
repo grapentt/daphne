@@ -251,28 +251,21 @@ mlir::OpFoldResult mlir::daphne::EwPowOp::fold(FoldAdaptor adaptor) {
 }
 
 mlir::OpFoldResult mlir::daphne::EwModOp::fold(FoldAdaptor adaptor) {
-    auto sintOp = [&](const llvm::APInt &a, const llvm::APInt &b) {
-        if (b == 0) {
-            throw ErrorHandler::compilerError(this->getLoc(), "CanonicalizerPass (mlir::daphne::EwModOp::fold)",
-                                              "Can't compute mod 0");
-        }
-        return a.srem(b);
-    };
-    auto uintOp = [&](const llvm::APInt &a, const llvm::APInt &b) {
-        if (b == 0) {
-            throw ErrorHandler::compilerError(this->getLoc(), "CanonicalizerPass (mlir::daphne::EwModOp::fold)",
-                                              "Can't compute mod 0");
-        }
-        return a.urem(b);
-    };
-    if (getType().isSignedInteger()) {
-        if (auto res = constFoldBinaryOp<IntegerAttr>(getLoc(), getType(), adaptor.getOperands(), sintOp))
-            return res;
-    } else if (getType().isUnsignedInteger()) {
-        if (auto res = constFoldBinaryOp<IntegerAttr>(getLoc(), getType(), adaptor.getOperands(), uintOp))
-            return res;
-    }
-    return {};
+    return foldScalarOp(*this, adaptor.getOperands(), getType(), getLoc());
+}
+
+std::optional<llvm::APInt> mlir::daphne::EwModOp::foldScalarSInt(const llvm::APInt &a, const llvm::APInt &b) {
+    if (b == 0)
+        throw ErrorHandler::compilerError(this->getLoc(), "CanonicalizerPass (mlir::daphne::EwModOp::fold)",
+                                          "Can't compute mod 0");
+    return a.srem(b);
+}
+
+std::optional<llvm::APInt> mlir::daphne::EwModOp::foldScalarUInt(const llvm::APInt &a, const llvm::APInt &b) {
+    if (b == 0)
+        throw ErrorHandler::compilerError(this->getLoc(), "CanonicalizerPass (mlir::daphne::EwModOp::fold)",
+                                          "Can't compute mod 0");
+    return a.urem(b);
 }
 
 mlir::OpFoldResult mlir::daphne::EwLogOp::fold(FoldAdaptor adaptor) {
@@ -339,38 +332,56 @@ mlir::OpFoldResult mlir::daphne::EwMaxOp::fold(FoldAdaptor adaptor) {
 }
 
 mlir::OpFoldResult mlir::daphne::EwAndOp::fold(FoldAdaptor adaptor) {
-    auto boolOp = [](const bool &a, const bool &b) { return a && b; };
-    auto intOp = [](const llvm::APInt &a, const llvm::APInt &b) { return (a != 0) && (b != 0); };
-    if (auto res = constFoldBinaryOp<BoolAttr>(getLoc(), getType(), adaptor.getOperands(), boolOp))
-        return res;
-    // TODO: should output bool?
-    if (auto res = constFoldBinaryOp<IntegerAttr>(getLoc(), getType(), adaptor.getOperands(), intOp))
-        return res;
-    return {};
+    return foldScalarOp(*this, adaptor.getOperands(), getType(), getLoc());
+}
+
+std::optional<bool> mlir::daphne::EwAndOp::foldScalarBool(bool a, bool b) { return a && b; }
+
+std::optional<llvm::APInt> mlir::daphne::EwAndOp::foldScalarSInt(const llvm::APInt &a, const llvm::APInt &b) {
+    // TODO: should output bool
+    unsigned w = getType().getIntOrFloatBitWidth();
+    return llvm::APInt(w, (a != 0) && (b != 0));
+}
+
+std::optional<llvm::APInt> mlir::daphne::EwAndOp::foldScalarUInt(const llvm::APInt &a, const llvm::APInt &b) {
+    unsigned w = getType().getIntOrFloatBitWidth();
+    return llvm::APInt(w, (a != 0) && (b != 0));
 }
 
 mlir::OpFoldResult mlir::daphne::EwBitwiseAndOp::fold(FoldAdaptor adaptor) { return {}; }
 
 mlir::OpFoldResult mlir::daphne::EwOrOp::fold(FoldAdaptor adaptor) {
-    auto boolOp = [](const bool &a, const bool &b) { return a || b; };
-    auto intOp = [](const llvm::APInt &a, const llvm::APInt &b) { return (a != 0) || (b != 0); };
-    if (auto res = constFoldBinaryOp<BoolAttr>(getLoc(), getType(), adaptor.getOperands(), boolOp))
-        return res;
+    return foldScalarOp(*this, adaptor.getOperands(), getType(), getLoc());
+}
+
+std::optional<bool> mlir::daphne::EwOrOp::foldScalarBool(bool a, bool b) { return a || b; }
+
+std::optional<llvm::APInt> mlir::daphne::EwOrOp::foldScalarSInt(const llvm::APInt &a, const llvm::APInt &b) {
     // TODO: should output bool
-    if (auto res = constFoldBinaryOp<IntegerAttr>(getLoc(), getType(), adaptor.getOperands(), intOp))
-        return res;
-    return {};
+    unsigned w = getType().getIntOrFloatBitWidth();
+    return llvm::APInt(w, (a != 0) || (b != 0));
+}
+
+std::optional<llvm::APInt> mlir::daphne::EwOrOp::foldScalarUInt(const llvm::APInt &a, const llvm::APInt &b) {
+    unsigned w = getType().getIntOrFloatBitWidth();
+    return llvm::APInt(w, (a != 0) || (b != 0));
 }
 
 mlir::OpFoldResult mlir::daphne::EwXorOp::fold(FoldAdaptor adaptor) {
-    auto boolOp = [](const bool &a, const bool &b) { return a ^ b; };
-    auto intOp = [](const llvm::APInt &a, const llvm::APInt &b) { return (a != 0) ^ (b != 0); };
-    if (auto res = constFoldBinaryOp<BoolAttr>(getLoc(), getType(), adaptor.getOperands(), boolOp))
-        return res;
+    return foldScalarOp(*this, adaptor.getOperands(), getType(), getLoc());
+}
+
+std::optional<bool> mlir::daphne::EwXorOp::foldScalarBool(bool a, bool b) { return a ^ b; }
+
+std::optional<llvm::APInt> mlir::daphne::EwXorOp::foldScalarSInt(const llvm::APInt &a, const llvm::APInt &b) {
     // TODO: should output bool
-    if (auto res = constFoldBinaryOp<IntegerAttr>(getLoc(), getType(), adaptor.getOperands(), intOp))
-        return res;
-    return {};
+    unsigned w = getType().getIntOrFloatBitWidth();
+    return llvm::APInt(w, (a != 0) ^ (b != 0));
+}
+
+std::optional<llvm::APInt> mlir::daphne::EwXorOp::foldScalarUInt(const llvm::APInt &a, const llvm::APInt &b) {
+    unsigned w = getType().getIntOrFloatBitWidth();
+    return llvm::APInt(w, (a != 0) ^ (b != 0));
 }
 
 mlir::OpFoldResult mlir::daphne::EwConcatOp::fold(FoldAdaptor adaptor) {
