@@ -230,7 +230,11 @@ def Daphne_SparsityOp : Daphne_Op<"sparsity", [DataTypeSca, Pure]> {
   let arguments = (ins MatrixOf<[AnyScalar]>:$arg);
   let results = (outs FloatScalar:$res);
 
-  let hasCanonicalizeMethod = 1;
+  // Pure op whose result, when the operand's sparsity is known, is a single
+  // f64 constant read from the type. Like the shape queries, this is the
+  // textbook folder shape, so we use a folder rather than a canonicalize
+  // rewrite.
+  let hasFolder = 1;
 }
 
 def Daphne_IsSymmetricOp : Daphne_Op<"isSymmetric", [Pure]> {

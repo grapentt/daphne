@@ -177,8 +177,8 @@ std::optional<llvm::APFloat> mlir::daphne::EwAddOp::foldScalarFloat(const llvm::
 }
 
 // Two's-complement addition produces the same bit pattern for signed and
-// unsigned inputs, so both methods share a body — the split exists so the
-// driver's signedness dispatch can find *some* handler for either result type.
+// unsigned inputs, so both methods share a body. The split exists so the
+// driver's signedness dispatch finds a handler for either result type.
 std::optional<llvm::APInt> mlir::daphne::EwAddOp::foldScalarSInt(const llvm::APInt &a, const llvm::APInt &b) {
     return a + b;
 }
@@ -289,9 +289,9 @@ mlir::OpFoldResult mlir::daphne::EwLogOp::fold(FoldAdaptor adaptor) {
 }
 
 std::optional<llvm::APFloat> mlir::daphne::EwLogOp::foldScalarFloat(const llvm::APFloat &a, const llvm::APFloat &b) {
-    // Element-wise log_b(a) — implemented via change-of-base on doubles
-    // because APFloat has no direct logarithm. Convert back into the
-    // operands' semantics for the FloatAttr the driver will build.
+    // Element-wise log_b(a) via change-of-base on doubles, because APFloat has
+    // no direct logarithm. Convert back into the operands' semantics for the
+    // FloatAttr the driver will build.
     double r = std::log(a.convertToDouble()) / std::log(b.convertToDouble());
     llvm::APFloat out(r);
     bool losesInfo = false;
@@ -419,9 +419,9 @@ mlir::OpFoldResult mlir::daphne::EwEqOp::fold(FoldAdaptor adaptor) {
     return {};
 }
 
-// The legacy Eq folder was signedness-agnostic on integer inputs — the
-// driver dispatches by input-type signedness, so both methods share a body
-// to cover signed, unsigned, and (via signed fallback) signless inputs.
+// The legacy Eq folder was signedness-agnostic on integer inputs. The driver
+// dispatches by input-type signedness, so both methods share a body to cover
+// signed, unsigned, and (via signed fallback) signless inputs.
 std::optional<bool> mlir::daphne::EwEqOp::foldScalarCmpFloat(const llvm::APFloat &a, const llvm::APFloat &b) {
     return a == b;
 }
@@ -527,4 +527,13 @@ mlir::OpFoldResult mlir::daphne::NumRowsOp::fold(FoldAdaptor) {
     if (numRows == -1)
         return {};
     return mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), numRows);
+}
+
+mlir::OpFoldResult mlir::daphne::SparsityOp::fold(FoldAdaptor) {
+    if (auto t = llvm::dyn_cast<mlir::daphne::MatrixType>(getArg().getType())) {
+        double sparsity = t.getSparsity();
+        if (sparsity != -1.0)
+            return mlir::FloatAttr::get(mlir::Float64Type::get(getContext()), sparsity);
+    }
+    return {};
 }

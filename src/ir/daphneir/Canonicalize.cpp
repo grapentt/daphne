@@ -232,24 +232,6 @@ mlir::LogicalResult mlir::daphne::NumCellsOp::canonicalize(mlir::daphne::NumCell
 }
 
 /**
- * @brief Replaces SparsityOp by a constant, if the sparsity of the input is
- * known (e.g., due to sparsity inference).
- */
-mlir::LogicalResult mlir::daphne::SparsityOp::canonicalize(mlir::daphne::SparsityOp op, PatternRewriter &rewriter) {
-    double sparsity = -1.0;
-
-    mlir::Type inTy = op.getArg().getType();
-    if (auto t = llvm::dyn_cast<mlir::daphne::MatrixType>(inTy))
-        sparsity = t.getSparsity();
-
-    if (sparsity != -1) {
-        rewriter.replaceOpWithNewOp<mlir::daphne::ConstantOp>(op, sparsity);
-        return mlir::success();
-    }
-    return mlir::failure();
-}
-
-/**
  * @brief Replaces (1) `a + b` by `a concat b`, if `a` or `b` is a string,
  * and (2) `a + X` by `X + a` (`a` scalar, `X` matrix/frame).
  *
