@@ -638,11 +638,10 @@ mlir::LogicalResult mlir::daphne::ExtractColOp::canonicalize(mlir::daphne::Extra
 mlir::LogicalResult mlir::daphne::CastOp::canonicalize(mlir::daphne::CastOp cOp, PatternRewriter &rewriter) {
     // TODO Maybe skip property casts, or separate them, combine multiple property casts.
 
-    // Replace cast "a -> a".
-    if (cOp.isTrivialCast()) {
-        rewriter.replaceOp(cOp, cOp.getArg());
-        return mlir::success();
-    }
+    // The trivial cast "a -> a" is handled by CastOp::fold, not here: the
+    // greedy driver attempts folding before it applies canonicalize patterns,
+    // so a trivial cast is already replaced by its argument before this method
+    // runs.
 
     // Replace cast "a -> b -> c" to cast "a -> c", if the cast "a -> b" does not lose information, because if "b"
     // contains the same information as "a", we could directly cast from "a" to "c".

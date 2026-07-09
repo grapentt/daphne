@@ -42,15 +42,26 @@ func.func @sparsity_unknown(%arg0: !daphne.Matrix<8x8xf64>) -> f64 {
     "daphne.return"(%0) : (f64) -> ()
 }
 
-// Rung 3 (DRR): a rename is a predicate-free structural pass-through of its
-// operand, so a declarative rewrite erases it and forwards the operand to its
-// users. After the pass no rename op survives and the argument flows straight
-// to the return.
+// Rung 3 (DRR): a rename is a predicate-free pass-through, so a declarative
+// rewrite erases it and forwards its operand to the users.
 // CHECK-LABEL: func.func @rename_erased
 // CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>)
 // CHECK-NOT: daphne.rename
 // CHECK: "daphne.return"(%[[ARG]])
 func.func @rename_erased(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64> {
     %0 = "daphne.rename"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%0) : (!daphne.Matrix<3x4xf64>) -> ()
+}
+
+// Rung 1 (Fold): a trivial cast whose result type equals its operand type is a
+// pure pass-through, folded away to the operand. The folder owns this case, so
+// the canonicalize method carries no branch for it; --canonicalize still erases
+// the cast because the driver folds before it applies canonicalize patterns.
+// CHECK-LABEL: func.func @trivial_cast_folded
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>)
+// CHECK-NOT: daphne.cast
+// CHECK: "daphne.return"(%[[ARG]])
+func.func @trivial_cast_folded(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64> {
+    %0 = "daphne.cast"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
     "daphne.return"(%0) : (!daphne.Matrix<3x4xf64>) -> ()
 }
