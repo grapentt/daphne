@@ -211,13 +211,20 @@ class Daphne_NumOp<string name, list<Trait> traits = []> : Daphne_Op<name, !list
 ])> {
     let arguments = (ins MatrixOrFrame:$arg);
     let results = (outs Size:$res);
-
-    let hasCanonicalizeMethod = 1;
 }
 
-def Daphne_NumRowsOp : Daphne_NumOp<"numRows">;
-def Daphne_NumColsOp : Daphne_NumOp<"numCols">;
-def Daphne_NumCellsOp : Daphne_NumOp<"numCells">;
+def Daphne_NumRowsOp : Daphne_NumOp<"numRows"> {
+    // Pure op whose result, when the operand's shape is statically known, is a
+    // single index constant read from the type. That is the textbook shape for
+    // a folder, so we use one instead of a canonicalize rewrite.
+    let hasFolder = 1;
+}
+def Daphne_NumColsOp : Daphne_NumOp<"numCols"> {
+    let hasCanonicalizeMethod = 1;
+}
+def Daphne_NumCellsOp : Daphne_NumOp<"numCells"> {
+    let hasCanonicalizeMethod = 1;
+}
 
 def Daphne_SparsityOp : Daphne_Op<"sparsity", [DataTypeSca, Pure]> {
   let arguments = (ins MatrixOf<[AnyScalar]>:$arg);

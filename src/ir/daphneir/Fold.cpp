@@ -513,3 +513,18 @@ std::optional<bool> mlir::daphne::EwGeOp::foldScalarCmpSInt(const llvm::APInt &a
 std::optional<bool> mlir::daphne::EwGeOp::foldScalarCmpUInt(const llvm::APInt &a, const llvm::APInt &b) {
     return a.uge(b);
 }
+
+// Shape queries fold to a single index constant whenever the operand's type
+// carries a known extent
+
+mlir::OpFoldResult mlir::daphne::NumRowsOp::fold(FoldAdaptor) {
+    ssize_t numRows = -1;
+    mlir::Type inTy = getArg().getType();
+    if (auto t = llvm::dyn_cast<mlir::daphne::MatrixType>(inTy))
+        numRows = t.getNumRows();
+    else if (auto t = llvm::dyn_cast<mlir::daphne::FrameType>(inTy))
+        numRows = t.getNumRows();
+    if (numRows == -1)
+        return {};
+    return mlir::IntegerAttr::get(mlir::IndexType::get(getContext()), numRows);
+}

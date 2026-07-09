@@ -186,27 +186,6 @@ mlir::LogicalResult mlir::daphne::MatMulOp::canonicalize(mlir::daphne::MatMulOp 
 }
 
 /**
- * @brief Replaces NumRowsOp by a constant, if the #rows of the input is known
- * (e.g., due to shape inference).
- */
-mlir::LogicalResult mlir::daphne::NumRowsOp::canonicalize(mlir::daphne::NumRowsOp op, PatternRewriter &rewriter) {
-    ssize_t numRows = -1;
-
-    mlir::Type inTy = op.getArg().getType();
-    if (auto t = llvm::dyn_cast<mlir::daphne::MatrixType>(inTy))
-        numRows = t.getNumRows();
-    else if (auto t = llvm::dyn_cast<mlir::daphne::FrameType>(inTy))
-        numRows = t.getNumRows();
-
-    if (numRows != -1) {
-        rewriter.replaceOpWithNewOp<mlir::daphne::ConstantOp>(op, rewriter.getIndexType(),
-                                                              rewriter.getIndexAttr(numRows));
-        return mlir::success();
-    }
-    return mlir::failure();
-}
-
-/**
  * @brief Replaces NumColsOp by a constant, if the #cols of the input is known
  * (e.g., due to shape inference).
  */
