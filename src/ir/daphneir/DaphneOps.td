@@ -271,9 +271,8 @@ class Daphne_EwUnaryOp<string name, Type scalarType, list<Trait> traits = []> : 
 // ----------------------------------------------------------------------------
 
 // TODO EwMinusOp: Should an unsigned integer argument yield a signed integer result?
-def Daphne_EwMinusOp : Daphne_EwUnaryOp<"ewMinus", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarUnaryFloat", "foldScalarUnaryInt"]>]> {
+def Daphne_EwMinusOp : Daphne_EwUnaryOp<"ewMinus", NumScalar, [ValueTypeFromFirstArg, Involutive, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarUnaryFloat", "foldScalarUnaryInt"]>]> {
    let hasFolder = 1;
-   let hasCanonicalizeMethod = 1;
 }
 def Daphne_EwAbsOp : Daphne_EwUnaryOp<"ewAbs", NumScalar, [ValueTypeFromFirstArg]>;
 def Daphne_EwSignOp : Daphne_EwUnaryOp<"ewSign", NumScalar, [ValueTypeFromFirstArg]>;
@@ -291,15 +290,9 @@ def Daphne_EwNegOp : Daphne_EwUnaryOp<"ewNeg", NumScalar, [ValueTypeFromFirstArg
 // Rounding
 // ----------------------------------------------------------------------------
 
-def Daphne_EwRoundOp : Daphne_EwUnaryOp<"ewRound", NumScalar, [ValueTypeFromFirstArg]> {
-    let hasCanonicalizeMethod = 1;
-}
-def Daphne_EwFloorOp : Daphne_EwUnaryOp<"ewFloor", NumScalar, [ValueTypeFromFirstArg]> {
-    let hasCanonicalizeMethod = 1;
-}
-def Daphne_EwCeilOp : Daphne_EwUnaryOp<"ewCeil", NumScalar, [ValueTypeFromFirstArg]> {
-    let hasCanonicalizeMethod = 1;
-}
+def Daphne_EwRoundOp : Daphne_EwUnaryOp<"ewRound", NumScalar, [ValueTypeFromFirstArg, IdentityOnIntegerElementType]>;
+def Daphne_EwFloorOp : Daphne_EwUnaryOp<"ewFloor", NumScalar, [ValueTypeFromFirstArg, IdentityOnIntegerElementType]>;
+def Daphne_EwCeilOp : Daphne_EwUnaryOp<"ewCeil", NumScalar, [ValueTypeFromFirstArg, IdentityOnIntegerElementType]>;
 
 // ----------------------------------------------------------------------------
 // Trigonometric
