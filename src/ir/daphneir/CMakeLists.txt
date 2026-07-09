@@ -34,6 +34,10 @@ set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls -name Daphne)
 add_public_tablegen_target(MLIRDaphneTransformsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS DaphneCanonicalizePatterns.td)
+mlir_tablegen(DaphneCanonicalizePatterns.inc -gen-rewriters)
+add_public_tablegen_target(MLIRDaphneCanonicalizePatternsIncGen)
+
 add_mlir_doc(Passes -gen-pass-doc DaphnePasses Dialects/)
 
 add_mlir_dialect_library(MLIRDaphne
@@ -41,6 +45,7 @@ add_mlir_dialect_library(MLIRDaphne
     Fold.cpp
     Canonicalize.cpp
     DaphneAlgebraicTraitPatterns.cpp
+    DaphneCanonicalizePatterns.cpp
     DaphneDistributableOpInterface.cpp
     DaphneInferFrameLabelsOpInterface.cpp
     DaphneInferSymmetricOpInterface.cpp
@@ -53,6 +58,7 @@ add_mlir_dialect_library(MLIRDaphne
     DEPENDS
     MLIRDaphneOpsIncGen
     MLIRDaphneTransformsIncGen
+    MLIRDaphneCanonicalizePatternsIncGen
     MLIRDaphneDistributableOpInterfaceIncGen
     MLIRDaphneInferFrameLabelsOpInterfaceIncGen
     MLIRDaphneInferSymmetricOpInterfaceIncGen

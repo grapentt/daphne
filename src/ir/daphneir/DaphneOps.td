@@ -1651,7 +1651,8 @@ def Daphne_RenameOp : Daphne_Op<"rename", [
 ]> {
     let arguments = (ins AnyType:$arg);
     let results = (outs AnyType:$res);
-    let hasCanonicalizeMethod = 1;
+    // Erased by a declarative rewrite (see DaphneCanonicalizePatterns.td).
+    let hasCanonicalizer = 1;
 }
 
 def Daphne_QuantizeOp : Daphne_Op<"quantize", [

@@ -515,13 +515,6 @@ mlir::LogicalResult mlir::daphne::ConvertMemRefToDenseMatrix::canonicalize(mlir:
     return mlir::success();
 }
 
-mlir::LogicalResult mlir::daphne::RenameOp::canonicalize(mlir::daphne::RenameOp op, mlir::PatternRewriter &rewriter) {
-    // Replace the RenameOp by its argument, since we only need
-    // this operation during DaphneDSL parsing.
-    rewriter.replaceOp(op, op.getArg());
-    return mlir::success();
-}
-
 /**
  * @brief Eliminates redundant conversions of a position list to a bitmap and back to a position list.
  *

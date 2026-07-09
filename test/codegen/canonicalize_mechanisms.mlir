@@ -41,3 +41,16 @@ func.func @sparsity_unknown(%arg0: !daphne.Matrix<8x8xf64>) -> f64 {
     %0 = "daphne.sparsity"(%arg0) : (!daphne.Matrix<8x8xf64>) -> f64
     "daphne.return"(%0) : (f64) -> ()
 }
+
+// Rung 3 (DRR): a rename is a predicate-free structural pass-through of its
+// operand, so a declarative rewrite erases it and forwards the operand to its
+// users. After the pass no rename op survives and the argument flows straight
+// to the return.
+// CHECK-LABEL: func.func @rename_erased
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>)
+// CHECK-NOT: daphne.rename
+// CHECK: "daphne.return"(%[[ARG]])
+func.func @rename_erased(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64> {
+    %0 = "daphne.rename"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%0) : (!daphne.Matrix<3x4xf64>) -> ()
+}
