@@ -356,7 +356,10 @@ class Daphne_EwBinaryOp<string name, Type scalarType, list<Trait> traits = []>
 
 // TODO Make EwAddOp Commutative again (see #449).
 def Daphne_EwAddOp    : Daphne_EwBinaryOp<"ewAdd", AnyScalar, [ValueTypeFromArgs, CastArgsToResType/*, Commutative*/, EwSparseIfBoth, CUDASupport, NeutralOnZeroRHS, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
-    let hasCanonicalizeMethod = 1;
+    // Two disjoint canonicalization patterns (string->concat, scalar-lhs
+    // normalization); registered together via getCanonicalizationPatterns
+    // rather than a single canonicalize method (see Canonicalize.cpp).
+    let hasCanonicalizer = 1;
 }
 def Daphne_EwSubOp    : Daphne_EwBinaryOp<"ewSub", NumScalar, [ValueTypeFromArgs, CastArgsToResType, EwSparseIfBoth, CUDASupport, NeutralOnZeroRHS, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
     let hasCanonicalizeMethod = 1;
