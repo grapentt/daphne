@@ -187,3 +187,12 @@ TEST_CASE("operator_at_non_syrk_not_symmetric", TAG_OPERATIONS) {
     CHECK(status == StatusCode::SUCCESS);
     CHECK_THAT(err.str(), !Catch::Contains("symmetric[true]"));
 }
+
+// Numerically proves the row-scaling rewrite `diag(v) @ X -> X * v` end-to-end
+// through the full compiler. The `.daphne` script uses diagMatrix() so the
+// rewrite fires; the `.ref.daphne` script forms the same product via a plain
+// diagonal matrix literal, which the rewrite leaves untouched. Their outputs
+// must match byte for byte, which guards the operand-order and broadcast-axis
+// invariants that a wrong rewrite would silently violate (the element-wise
+// kernel would miscompute rather than throw).
+TEST_CASE("rewrite_row_scale", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_row_scale", 1); }
