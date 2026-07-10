@@ -41,10 +41,7 @@ void distributedPipeline(DTRes **outputs, size_t numOutputs, const Structure **i
 // kernels.json. Drift is detected at CMake configure time by
 // checkExplicitInstantiations.py; if that check fails, add the missing
 // `template void distributedPipeline<...>` line below or drop the extra one.
-template void distributedPipeline<DenseMatrix<double>>(
-        DenseMatrix<double> **outputs, size_t numOutputs,
-        const Structure **inputs, size_t numInputs,
-        int64_t *outRows, int64_t *outCols,
-        int64_t *splits, int64_t *combines,
-        const char *irCode,
-        DaphneContext *ctx);
+template void distributedPipeline<DenseMatrix<double>>(DenseMatrix<double> **outputs, size_t numOutputs,
+                                                       const Structure **inputs, size_t numInputs, int64_t *outRows,
+                                                       int64_t *outCols, int64_t *splits, int64_t *combines,
+                                                       const char *irCode, DaphneContext *ctx);

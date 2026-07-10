@@ -42,10 +42,8 @@ void distributedPipeline(DTRes **outputs, size_t numOutputs, const Structure **i
 // template keeps each including TU from instantiating the template again, so it
 // links against the one in the .cpp. checkExplicitInstantiations.py also checks
 // this list against kernels.json at configure time.
-extern template void distributedPipeline<DenseMatrix<double>>(
-        DenseMatrix<double> **outputs, size_t numOutputs,
-        const Structure **inputs, size_t numInputs,
-        int64_t *outRows, int64_t *outCols,
-        int64_t *splits, int64_t *combines,
-        const char *irCode,
-        DaphneContext *ctx);
+extern template void distributedPipeline<DenseMatrix<double>>(DenseMatrix<double> **outputs, size_t numOutputs,
+                                                              const Structure **inputs, size_t numInputs,
+                                                              int64_t *outRows, int64_t *outCols, int64_t *splits,
+                                                              int64_t *combines, const char *irCode,
+                                                              DaphneContext *ctx);
