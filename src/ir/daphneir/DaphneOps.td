@@ -253,7 +253,8 @@ def Daphne_MatMulOp : Daphne_Op<"matMul", [
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
     DataTypeMat, ValueTypeFromArgs,
     DeclareOpInterfaceMethods<InferShapeOpInterface>,
-    DeclareOpInterfaceMethods<InferSparsityOpInterface>, CUDASupport, FPGAOPENCLSupport,
+    DeclareOpInterfaceMethods<InferSparsityOpInterface>,
+    DeclareOpInterfaceMethods<InferSymmetricOpInterface>, CUDASupport, FPGAOPENCLSupport,
     CastFirstTwoArgsToResType, Pure
 ]> {
     let arguments = (ins MatrixOf<[NumScalar]>:$lhs, MatrixOf<[NumScalar]>:$rhs, BoolScalar:$transa, BoolScalar:$transb);

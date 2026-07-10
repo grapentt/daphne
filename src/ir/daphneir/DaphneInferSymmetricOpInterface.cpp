@@ -52,6 +52,32 @@ std::vector<BoolOrUnknown> daphne::SyrkOp::inferSymmetric() {
     return {BoolOrUnknown::True};
 }
 
+std::vector<BoolOrUnknown> daphne::MatMulOp::inferSymmetric() {
+    // A matrix product is symmetric when it has the "syrk" shape A @ t(A) or t(A) @ A: the two operands are the same
+    // matrix and exactly one of them is transposed. Such a product is square and symmetric for any real A, regardless
+    // of the (possibly unknown) static shape.
+    mlir::Value lhs = getLhs();
+    mlir::Value rhs = getRhs();
+    std::pair<bool, bool> transa = CompilerUtils::isConstant<bool>(getTransa());
+    std::pair<bool, bool> transb = CompilerUtils::isConstant<bool>(getTransb());
+    if (!transa.first || !transb.first)
+        return {BoolOrUnknown::Unknown};
+    // Folded form: matMul(X, X, false, true) / matMul(X, X, true, false).
+    if (lhs == rhs && (transa.second != transb.second))
+        return {BoolOrUnknown::True};
+    // Un-folded form: matMul(X, transpose(X)) / matMul(transpose(X), X), which survives when the transpose was not
+    // folded into a flag.
+    if (!transa.second && !transb.second) {
+        if (auto rhsT = rhs.getDefiningOp<daphne::TransposeOp>())
+            if (rhsT.getArg() == lhs) // X @ t(X)
+                return {BoolOrUnknown::True};
+        if (auto lhsT = lhs.getDefiningOp<daphne::TransposeOp>())
+            if (lhsT.getArg() == rhs) // t(X) @ X
+                return {BoolOrUnknown::True};
+    }
+    return {BoolOrUnknown::Unknown};
+}
+
 // ****************************************************************************
 // Inference function
 // ****************************************************************************
