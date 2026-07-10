@@ -151,3 +151,19 @@ TEST_CASE("operator_at_symmetry", TAG_OPERATIONS) {
             }
         }
 }
+
+TEST_CASE("operator_at_symmetry_inference", TAG_OPERATIONS) {
+    // The compiler infers at compile-time that `t(X) @ X` and `X @ t(X)` are symmetric (a matrix product with the syrk
+    // shape is symmetric for any real X). We check this by dumping the IR after property inference and looking for the
+    // inferred symmetric property on the matmul results. This is the compile-time counterpart to the run-time
+    // isSymmetric() check above.
+    std::string scriptFilePath = dirPath + "operator_at_symmetry.daphne";
+
+    std::stringstream out, err;
+    int status = runDaphne(out, err, "--explain", "property_inference", scriptFilePath.c_str(), "numRows=3",
+                           "numCols=4", "checkSymmetry=false");
+
+    CHECK(status == StatusCode::SUCCESS);
+    // Both matmul results (t(X) @ X and X @ t(X)) must carry the inferred symmetric property.
+    CHECK_THAT(err.str(), Catch::Contains("symmetric[true]"));
+}
