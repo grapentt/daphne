@@ -162,13 +162,89 @@ struct RowScalePattern : public OpRewritePattern<daphne::MatMulOp> {
     }
 };
 
+/**
+ * @brief Rewrites the column-scaling idiom `X @ diag(v)` to `X * t(v)`.
+ *
+ * Multiplying by a diagonal matrix on the right scales each column: with v an
+ * m x 1 column vector and X an n x m matrix, `X @ diag(v)` is n x m and its
+ * column j equals `v[j] * X[:, j]`. Transposing v to the 1 x m row vector t(v)
+ * and forming the element-wise product `X * t(v)` broadcasts that row vector
+ * down the rows of X and computes exactly this, so the rewrite replaces an
+ * O(n * m^2) matrix product against a materialized m x m diagonal with an
+ * O(n * m) element-wise product plus a cheap transpose (and, since diagMatrix
+ * is Pure, lets DCE drop the now-dead diagonal).
+ *
+ * The transpose is needed here: the element-wise kernel broadcasts across
+ * columns only when the vector is a row vector (1 x m), so v (m x 1) must be
+ * transposed. Operand order matters too: that broadcast branch is
+ * anchored on the matrix being the left operand, so the matrix must be the lhs
+ * and the row vector the rhs. The order is safe from later reordering:
+ * EwMul's canonicalizer only swaps a scalar lhs, and neither operand here is a
+ * scalar.
+ *
+ * The rewrite fails closed, matching only a non-transposed product whose
+ * diagonal argument is a statically-known column vector, whose operands share
+ * an element type, and whose column extent statically agrees with the vector
+ * length (so the broadcast branch is guaranteed to fire); see the per-guard
+ * comments below.
+ */
+struct ColScalePattern : public OpRewritePattern<daphne::MatMulOp> {
+    using OpRewritePattern<daphne::MatMulOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(daphne::MatMulOp matMulOp, PatternRewriter &rewriter) const override {
+        auto diagOp = matMulOp.getRhs().getDefiningOp<daphne::DiagMatrixOp>();
+        if (!diagOp)
+            return failure();
+
+        // Only the plain, non-transposed product carries the column-scaling identity.
+        if (CompilerUtils::constantOrDefault<bool>(matMulOp.getTransa(), false) ||
+            CompilerUtils::constantOrDefault<bool>(matMulOp.getTransb(), false))
+            return failure();
+
+        Value x = matMulOp.getLhs();
+        Value v = diagOp.getArg();
+
+        // The emitted ewMul must be well-typed: X and v need the same element type.
+        Type elemV = getMatrixElementTypeOrNull(v);
+        Type elemX = getMatrixElementTypeOrNull(x);
+        if (!elemV || !elemX || elemV != elemX)
+            return failure();
+
+        // v must be a statically-known m x 1 column vector, and X's column extent
+        // must statically match its length, so t(v) is a 1 x m row vector whose
+        // width equals X's and the element-wise kernel is guaranteed to take the
+        // row-vector broadcast branch (matrix cols == vector cols, vector has one
+        // row). Compare against X's columns here: the diagonal is on the right,
+        // so it scales columns, unlike the row-scaling pattern. Fail closed on any
+        // unknown or mismatched extent: a wrong broadcast would silently
+        // miscompute rather than throw.
+        std::optional<ssize_t> rowsV = daphne::knownNumRows(v);
+        std::optional<ssize_t> colsV = daphne::knownNumCols(v);
+        std::optional<ssize_t> colsX = daphne::knownNumCols(x);
+        if (!rowsV || !colsV || !colsX)
+            return failure();
+        if (*colsV != 1 || *rowsV != *colsX)
+            return failure();
+
+        // X * t(v): matrix as lhs, row vector as rhs (the only order the broadcast
+        // kernel handles, and the order EwMul's canonicalizer leaves untouched since
+        // neither operand is a scalar). t(v) is given a concrete 1 x m result type:
+        // shape inference has already run by the time this pass fires, so a shape
+        // left unknown here would never be resolved and kernel dispatch would fail.
+        auto vMatTy = llvm::cast<daphne::MatrixType>(v.getType());
+        Value tv = rewriter.create<daphne::TransposeOp>(matMulOp.getLoc(), vMatTy.withShape(1, *rowsV), v);
+        rewriter.replaceOpWithNewOp<daphne::EwMulOp>(matMulOp, matMulOp.getResult().getType(), x, tv);
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::daphne {
 
 void populateLinearAlgebraRewritePatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
-    patterns.add<TraceIdiomPattern, RowScalePattern>(ctx);
+    patterns.add<TraceIdiomPattern, RowScalePattern, ColScalePattern>(ctx);
 }
 
 } // namespace mlir::daphne

@@ -87,3 +87,46 @@ func.func @row_scale_transposed(%v: !daphne.Matrix<3x1xf64>, %x: !daphne.Matrix<
     %p = "daphne.matMul"(%d, %x, %true, %false) : (!daphne.Matrix<3x3xf64>, !daphne.Matrix<3x4xf64>, i1, i1) -> !daphne.Matrix<3x4xf64>
     "daphne.return"(%p) : (!daphne.Matrix<3x4xf64>) -> ()
 }
+
+// Column scaling: X @ diag(v) with X n x m and v an m x 1 column vector is
+// rewritten to X * t(v): the matMul and the materialized m x m diagonal are
+// gone, replaced by a transpose of v to a 1 x m row vector and a single ewMul
+// broadcasting it across the columns of X. The operand order is X (matrix)
+// first, t(v) (row vector) second.
+// CHECK-LABEL: func.func @col_scale
+// CHECK-NOT: daphne.matMul
+// CHECK-NOT: daphne.diagMatrix
+// CHECK: daphne.transpose
+// CHECK: daphne.ewMul
+func.func @col_scale(%x: !daphne.Matrix<3x4xf64>, %v: !daphne.Matrix<4x1xf64>) -> !daphne.Matrix<3x4xf64> {
+    %false = "daphne.constant"() <{value = false}> : () -> i1
+    %d = "daphne.diagMatrix"(%v) : (!daphne.Matrix<4x1xf64>) -> !daphne.Matrix<4x4xf64>
+    %p = "daphne.matMul"(%x, %d, %false, %false) : (!daphne.Matrix<3x4xf64>, !daphne.Matrix<4x4xf64>, i1, i1) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%p) : (!daphne.Matrix<3x4xf64>) -> ()
+}
+
+// Negative case: unknown shape. Without a statically known column extent the
+// rewrite cannot prove the broadcast branch will fire, so it fails closed and
+// the matMul survives.
+// CHECK-LABEL: func.func @col_scale_unknown_shape
+// CHECK: daphne.diagMatrix
+// CHECK: daphne.matMul
+func.func @col_scale_unknown_shape(%x: !daphne.Matrix<?x?xf64>, %v: !daphne.Matrix<?x1xf64>) -> !daphne.Matrix<?x?xf64> {
+    %false = "daphne.constant"() <{value = false}> : () -> i1
+    %d = "daphne.diagMatrix"(%v) : (!daphne.Matrix<?x1xf64>) -> !daphne.Matrix<?x?xf64>
+    %p = "daphne.matMul"(%x, %d, %false, %false) : (!daphne.Matrix<?x?xf64>, !daphne.Matrix<?x?xf64>, i1, i1) -> !daphne.Matrix<?x?xf64>
+    "daphne.return"(%p) : (!daphne.Matrix<?x?xf64>) -> ()
+}
+
+// Negative case: a transposed matMul flag is a different chain the rewrite does
+// not handle, so the matMul survives.
+// CHECK-LABEL: func.func @col_scale_transposed
+// CHECK: daphne.diagMatrix
+// CHECK: daphne.matMul
+func.func @col_scale_transposed(%x: !daphne.Matrix<3x4xf64>, %v: !daphne.Matrix<4x1xf64>) -> !daphne.Matrix<3x4xf64> {
+    %true = "daphne.constant"() <{value = true}> : () -> i1
+    %false = "daphne.constant"() <{value = false}> : () -> i1
+    %d = "daphne.diagMatrix"(%v) : (!daphne.Matrix<4x1xf64>) -> !daphne.Matrix<4x4xf64>
+    %p = "daphne.matMul"(%x, %d, %false, %true) : (!daphne.Matrix<3x4xf64>, !daphne.Matrix<4x4xf64>, i1, i1) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%p) : (!daphne.Matrix<3x4xf64>) -> ()
+}
