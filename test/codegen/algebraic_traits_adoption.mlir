@@ -378,3 +378,26 @@ func.func @agg_reorder_min_not_agnostic(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {
     %1 = "daphne.minAll"(%0) : (!daphne.Matrix<4x3xf64>) -> f64
     "daphne.return"(%1) : (f64) -> ()
 }
+
+// IdentityWhenSymmetric on TransposeOp: transposing a matrix known to be
+// symmetric is a no-op and is elided. The rewrite requires the operand type to
+// equal the result type, so the symmetric[true] annotation must appear on both.
+// CHECK-LABEL: func.func @transpose_symmetric_matrix
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x3xf64:symmetric[true]>)
+// CHECK-NEXT: "daphne.return"(%[[ARG]])
+// CHECK-NOT: daphne.transpose
+func.func @transpose_symmetric_matrix(%arg0: !daphne.Matrix<3x3xf64:symmetric[true]>)
+        -> !daphne.Matrix<3x3xf64:symmetric[true]> {
+    %0 = "daphne.transpose"(%arg0)
+        : (!daphne.Matrix<3x3xf64:symmetric[true]>) -> !daphne.Matrix<3x3xf64:symmetric[true]>
+    "daphne.return"(%0) : (!daphne.Matrix<3x3xf64:symmetric[true]>) -> ()
+}
+
+// IdentityWhenSymmetric negative case: with symmetry unknown the rewrite bails
+// (unknown must not be treated as symmetric), so the transpose survives.
+// CHECK-LABEL: func.func @transpose_unknown_symmetric
+// CHECK: daphne.transpose
+func.func @transpose_unknown_symmetric(%arg0: !daphne.Matrix<3x3xf64>) -> !daphne.Matrix<3x3xf64> {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<3x3xf64>) -> !daphne.Matrix<3x3xf64>
+    "daphne.return"(%0) : (!daphne.Matrix<3x3xf64>) -> ()
+}

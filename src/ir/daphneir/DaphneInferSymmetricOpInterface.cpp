@@ -47,6 +47,11 @@ std::vector<BoolOrUnknown> daphne::TransposeOp::inferSymmetric() {
     return {BoolOrUnknown::Unknown};
 }
 
+std::vector<BoolOrUnknown> daphne::SyrkOp::inferSymmetric() {
+    // SyrkOp computes t(A) @ A or A @ t(A), which is always symmetric.
+    return {BoolOrUnknown::True};
+}
+
 // ****************************************************************************
 // Inference function
 // ****************************************************************************
