@@ -18,6 +18,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Support/LogicalResult.h"
 #include <compiler/utils/CompilerUtils.h>
+#include <ir/daphneir/DataPropertyAccessors.h>
 
 /**
  * @brief Eliminates a `TransferPropertiesOp` if it is the only user of its argument.
@@ -160,11 +161,11 @@ mlir::LogicalResult mlir::daphne::MatMulOp::canonicalize(mlir::daphne::MatMulOp 
     //   sparse kernels.
     // ToDo: bring user config here for sparsity threshold or properly use
     // MatrixRepresentation
-    if (auto t = llvm::dyn_cast<mlir::daphne::MatrixType>(rhs.getType())) {
-        auto sparsity = t.getSparsity();
-        if (sparsity < 0.25)
-            return mlir::failure();
-    }
+    // Only merge when the rhs is known to be dense enough; bail if the sparsity
+    // was never inferred (unknown must not be treated as dense).
+    std::optional<double> rhsSparsity = knownSparsity(rhs);
+    if (!rhsSparsity || *rhsSparsity < 0.25)
+        return mlir::failure();
 
 #if 0
     // TODO Adapt PhyOperatorSelectionPass once this code is turned on again.
