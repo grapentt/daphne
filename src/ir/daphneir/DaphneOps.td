@@ -771,6 +771,7 @@ def Daphne_TransposeOp : Daphne_Op<"transpose", [
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
     NumRowsFromArgNumCols, NumColsFromArgNumRows, SparsityFromArg, CUDASupport,
     DeclareOpInterfaceMethods<InferSymmetricOpInterface>,
+    IdentityWhenSymmetric,
     Pure
 ]> {
     let arguments = (ins MatrixOrU:$arg);
@@ -1060,6 +1061,7 @@ def Daphne_SyrkOp : Daphne_Op<"syrk", [
     TypeFromFirstArg,
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
     NumRowsFromArgNumCols, NumColsFromArg, CUDASupport,FPGAOPENCLSupport,
+    DeclareOpInterfaceMethods<InferSymmetricOpInterface>,
     CastFirstArgToResType, Pure
 ]> {
     let summary = [{Performs the operation `t(A) @ A` if `transLeft` is `true`; or `A @ t(A)`, otherwise.}];
