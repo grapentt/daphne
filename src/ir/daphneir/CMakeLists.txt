@@ -46,6 +46,7 @@ add_mlir_dialect_library(MLIRDaphne
     Canonicalize.cpp
     DataPropertyAccessors.cpp
     DaphneAlgebraicTraitPatterns.cpp
+    LinearAlgebraRewrites.cpp
     DaphneCanonicalizePatterns.cpp
     DaphneDistributableOpInterface.cpp
     DaphneInferFrameLabelsOpInterface.cpp

@@ -16,6 +16,7 @@
 
 #include "ir/daphneir/Daphne.h"
 #include "ir/daphneir/DaphneAlgebraicTraitPatterns.h"
+#include "ir/daphneir/LinearAlgebraRewrites.h"
 #include "ir/daphneir/Passes.h"
 
 #include "mlir/IR/PatternMatch.h"
@@ -41,6 +42,7 @@ struct AlgebraicSimplifyPass : public PassWrapper<AlgebraicSimplifyPass, Operati
     void runOnOperation() final {
         RewritePatternSet patterns(&getContext());
         daphne::populateAlgebraicTraitPatterns(patterns);
+        daphne::populateLinearAlgebraRewritePatterns(patterns);
         if (failed(applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
             signalPassFailure();
     }
