@@ -27,18 +27,6 @@ include "mlir/IR/OpBase.td"
 // whose result type differs from the operand type (e.g. TransposeOp).
 def Involutive : NativeOpTrait<"Involutive">;
 
-// (No umbrella Idempotent marker: MLIR reserves that name in
-// mlir/IR/OpBase.td for its own trait.)
-
-// Unary f: f(f(x)) = f(x).
-def IdempotentUnary : NativeOpTrait<"IdempotentUnary">;
-
-// Binary f: f(x, x) = x.
-def IdempotentBinary : NativeOpTrait<"IdempotentBinary">;
-
-// Binary f: f(f(x, y), y) = f(x, y).
-def IdempotentOnSelf : NativeOpTrait<"IdempotentOnSelf">;
-
 // f(X) = X when X's element type is any integer.
 def IdentityOnIntegerElementType : NativeOpTrait<"IdentityOnIntegerElementType">;
 
@@ -50,7 +38,7 @@ def IdentityWhenSymmetric : NativeOpTrait<"IdentityWhenSymmetric">;
 // ****************************************************************************
 
 // Enumerated rather than TableGen-parametric: the constant K and operand
-// position i cover only two small cardinalities in practice, so five discrete
+// position i cover only two small cardinalities in practice, so discrete
 // defs beat one ParamNativeOpTrait that would need runtime attribute parsing.
 
 // f(x, 0) = x.
@@ -64,11 +52,5 @@ def LeftAbsorbingOnZero : NativeOpTrait<"LeftAbsorbingOnZero">;
 
 // f(x, 0) = 0.
 def RightAbsorbingOnZero : NativeOpTrait<"RightAbsorbingOnZero">;
-
-// f(X) = X when X's row dimension is statically 1.
-def IdentityOnSingletonRowDim : NativeOpTrait<"IdentityOnSingletonRowDim">;
-
-// f(X) = X when X's column dimension is statically 1.
-def IdentityOnSingletonColDim : NativeOpTrait<"IdentityOnSingletonColDim">;
 
 #endif // SRC_IR_DAPHNEIR_DAPHNEALGEBRAICTRAITS_TD

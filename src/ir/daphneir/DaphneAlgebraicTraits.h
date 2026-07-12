@@ -27,12 +27,6 @@ namespace mlir::OpTrait {
 
 template <class ConcreteOp> class Involutive : public TraitBase<ConcreteOp, Involutive> {};
 
-template <class ConcreteOp> class IdempotentUnary : public TraitBase<ConcreteOp, IdempotentUnary> {};
-
-template <class ConcreteOp> class IdempotentBinary : public TraitBase<ConcreteOp, IdempotentBinary> {};
-
-template <class ConcreteOp> class IdempotentOnSelf : public TraitBase<ConcreteOp, IdempotentOnSelf> {};
-
 template <class ConcreteOp>
 class IdentityOnIntegerElementType : public TraitBase<ConcreteOp, IdentityOnIntegerElementType> {};
 
@@ -45,12 +39,6 @@ template <class ConcreteOp> class NeutralOnOneRHS : public TraitBase<ConcreteOp,
 template <class ConcreteOp> class LeftAbsorbingOnZero : public TraitBase<ConcreteOp, LeftAbsorbingOnZero> {};
 
 template <class ConcreteOp> class RightAbsorbingOnZero : public TraitBase<ConcreteOp, RightAbsorbingOnZero> {};
-
-template <class ConcreteOp>
-class IdentityOnSingletonRowDim : public TraitBase<ConcreteOp, IdentityOnSingletonRowDim> {};
-
-template <class ConcreteOp>
-class IdentityOnSingletonColDim : public TraitBase<ConcreteOp, IdentityOnSingletonColDim> {};
 
 } // namespace mlir::OpTrait
 

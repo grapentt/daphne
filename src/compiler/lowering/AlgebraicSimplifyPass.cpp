@@ -31,7 +31,7 @@ namespace {
  *
  * The pass runs the generic rewrite drivers registered by
  * `populateAlgebraicTraitPatterns` against every op in the module. Each driver
- * gates on a specific op trait (Involutive, IdempotentUnary, NeutralOnZeroRHS,
+ * gates on a specific op trait (Involutive, NeutralOnZeroRHS,
  * etc.), so the pass automatically picks up new adopters without further
  * modification.
  */

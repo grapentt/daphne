@@ -16,6 +16,8 @@
 
 #include "ir/daphneir/DaphneScalarConstantFoldable.h"
 
+#include "ir/daphneir/DaphneInferTypesOpInterface.h"
+
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 
@@ -139,10 +141,21 @@ static Attribute foldScalarArithBinary(ScalarConstantFoldable op, Attribute lhs,
 
 static Attribute foldScalarCmpBinary(ScalarConstantFoldable op, Attribute lhs, Attribute rhs, Type resultType,
                                      Location loc) {
+    // A comparison yields a truth value, but DAPHNE represents it in the op's
+    // (numeric) result type rather than i1 — matching the legacy Fold.cpp
+    // comparison folders, which materialised the bool into `getType()`. So a
+    // float-typed comparison result is a FloatAttr holding 0.0/1.0, and an
+    // integer-typed one is an IntegerAttr holding 0/1.
+    auto materialize = [&](bool v) -> Attribute {
+        if (llvm::isa<FloatType>(resultType))
+            return FloatAttr::getChecked(loc, resultType, llvm::APFloat(v ? 1.0 : 0.0));
+        return IntegerAttr::getChecked(loc, resultType, v ? 1 : 0);
+    };
+
     if (isFloatAttrPair(lhs, rhs)) {
         auto [l, r] = promoteWidth(llvm::cast<FloatAttr>(lhs), llvm::cast<FloatAttr>(rhs), loc);
         if (auto v = op.foldScalarCmpFloat(l.getValue(), r.getValue()))
-            return IntegerAttr::getChecked(loc, resultType, *v);
+            return materialize(*v);
     }
     if (isIntAttrPair(lhs, rhs)) {
         auto [l, r] = promoteWidth(llvm::cast<IntegerAttr>(lhs), llvm::cast<IntegerAttr>(rhs), loc);
@@ -153,10 +166,10 @@ static Attribute foldScalarCmpBinary(ScalarConstantFoldable op, Attribute lhs, A
         // isSignedInteger() / isUnsignedInteger() explicitly.
         if (auto intTy = llvm::dyn_cast<IntegerType>(argTy); intTy && intTy.isUnsigned()) {
             if (auto v = op.foldScalarCmpUInt(l.getValue(), r.getValue()))
-                return IntegerAttr::getChecked(loc, resultType, *v);
+                return materialize(*v);
         } else if (auto intTy = llvm::dyn_cast<IntegerType>(argTy); intTy && intTy.isSigned()) {
             if (auto v = op.foldScalarCmpSInt(l.getValue(), r.getValue()))
-                return IntegerAttr::getChecked(loc, resultType, *v);
+                return materialize(*v);
         }
     }
     return {};
@@ -179,11 +192,12 @@ Attribute foldScalarOp(ScalarConstantFoldable op, ArrayRef<Attribute> operands, 
     if (!operands[0] || !operands[1])
         return {};
 
-    // Dispatch heuristic: an i1 result usually means a comparison (numeric in,
-    // bool out), but bool-typed logical ops (EwAndOp/EwOrOp/EwXorOp on `bool`
-    // operands) also produce i1. Both-bool-operand pairs go through the
-    // arithmetic path so the op's `foldScalarBool` gets called.
-    const bool isCmp = resultType.isSignlessInteger(1) && !isBoolAttrPair(operands[0], operands[1]);
+    // Comparison ops (numeric in, truth value out) carry the ValueTypeCmp
+    // trait; every other binary op is arithmetic (numeric in, numeric out).
+    // Dispatch on the trait rather than the result type: ValueTypeCmp gives a
+    // comparison the most-general *argument* value type (e.g. si64/f64), never
+    // i1, so an i1-result heuristic would never route comparisons here.
+    const bool isCmp = op->hasTrait<OpTrait::ValueTypeCmp>();
     return isCmp ? foldScalarCmpBinary(op, operands[0], operands[1], resultType, loc)
                  : foldScalarArithBinary(op, operands[0], operands[1], resultType, loc);
 }

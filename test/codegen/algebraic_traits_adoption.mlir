@@ -61,12 +61,24 @@ func.func @round_float_matrix(%arg0: !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<
     "daphne.return"(%0) : (!daphne.Matrix<2x3xf64>) -> ()
 }
 
-// NeutralOnZeroRHS on EwAddOp: x + 0 collapses to x for a scalar operand.
-// CHECK-LABEL: func.func @add_zero_scalar
-// CHECK-SAME: (%[[ARG:.*]]: f64) -> f64
+// NeutralOnZeroRHS on EwAddOp: x + 0 collapses to x for an integer operand.
+// Gated to integers: over floats (-0.0) + 0.0 = +0.0, so x + 0.0 -> x would
+// wrongly preserve a negative zero.
+// CHECK-LABEL: func.func @add_zero_int
+// CHECK-SAME: (%[[ARG:.*]]: si64) -> si64
 // CHECK-NEXT: "daphne.return"(%[[ARG]])
 // CHECK-NOT: daphne.ewAdd
-func.func @add_zero_scalar(%arg0: f64) -> f64 {
+func.func @add_zero_int(%arg0: si64) -> si64 {
+    %0 = "daphne.constant"() {value = 0 : si64} : () -> si64
+    %1 = "daphne.ewAdd"(%arg0, %0) : (si64, si64) -> si64
+    "daphne.return"(%1) : (si64) -> ()
+}
+
+// NeutralOnZeroRHS on EwAddOp negative case: over a float element type the
+// rewrite must not fire (signed-zero fidelity). The ewAdd must survive.
+// CHECK-LABEL: func.func @add_zero_float
+// CHECK: daphne.ewAdd
+func.func @add_zero_float(%arg0: f64) -> f64 {
     %0 = "daphne.constant"() {value = 0.0 : f64} : () -> f64
     %1 = "daphne.ewAdd"(%arg0, %0) : (f64, f64) -> f64
     "daphne.return"(%1) : (f64) -> ()
@@ -81,9 +93,10 @@ func.func @add_nonzero_scalar(%arg0: f64) -> f64 {
     "daphne.return"(%1) : (f64) -> ()
 }
 
-// NeutralOnZeroRHS on EwSubOp: x - 0 collapses to x. One adopter shared per
-// trait is enough to lock in the mechanism; this exercises the second adopter
-// so a broken trait attachment on EwSubOp is caught independently of EwAddOp.
+// NeutralOnZeroRHS on EwSubOp: x - 0 collapses to x. This stays valid over
+// floats too: x - 0.0 = x is exact for every IEEE value (including signed
+// zero), so unlike ewAdd it is not gated to integers. Exercising the second
+// adopter also catches a broken trait attachment on EwSubOp independently.
 // CHECK-LABEL: func.func @sub_zero_scalar
 // CHECK-SAME: (%[[ARG:.*]]: f64) -> f64
 // CHECK-NEXT: "daphne.return"(%[[ARG]])
@@ -127,26 +140,36 @@ func.func @div_two_scalar(%arg0: f64) -> f64 {
     "daphne.return"(%1) : (f64) -> ()
 }
 
-// RightAbsorbingOnZero on EwMulOp: x * 0 collapses to 0 for a scalar operand.
-// The rewrite requires the zero constant's type to match the result type,
-// which is trivially the case here (both f64).
-// CHECK-LABEL: func.func @mul_zero_rhs_scalar
-// CHECK: %[[Z:.*]] = "daphne.constant"() <{value = 0.000000e+00 : f64}>
+// RightAbsorbingOnZero on EwMulOp: x * 0 collapses to 0, but only for integer
+// element types. Over IEEE floating point the identity is false (NaN * 0 = NaN,
+// Inf * 0 = NaN), so the rewrite is gated on an integer element type.
+// CHECK-LABEL: func.func @mul_zero_rhs_int
+// CHECK: %[[Z:.*]] = "daphne.constant"() <{value = 0 : si64}>
 // CHECK-NEXT: "daphne.return"(%[[Z]])
 // CHECK-NOT: daphne.ewMul
-func.func @mul_zero_rhs_scalar(%arg0: f64) -> f64 {
-    %0 = "daphne.constant"() {value = 0.0 : f64} : () -> f64
-    %1 = "daphne.ewMul"(%arg0, %0) : (f64, f64) -> f64
-    "daphne.return"(%1) : (f64) -> ()
+func.func @mul_zero_rhs_int(%arg0: si64) -> si64 {
+    %0 = "daphne.constant"() {value = 0 : si64} : () -> si64
+    %1 = "daphne.ewMul"(%arg0, %0) : (si64, si64) -> si64
+    "daphne.return"(%1) : (si64) -> ()
 }
 
-// LeftAbsorbingOnZero on EwMulOp: 0 * x collapses to 0 for a scalar operand.
-// CHECK-LABEL: func.func @mul_zero_lhs_scalar
-// CHECK: %[[Z:.*]] = "daphne.constant"() <{value = 0.000000e+00 : f64}>
+// LeftAbsorbingOnZero on EwMulOp: 0 * x collapses to 0 for an integer operand.
+// CHECK-LABEL: func.func @mul_zero_lhs_int
+// CHECK: %[[Z:.*]] = "daphne.constant"() <{value = 0 : si64}>
 // CHECK-NEXT: "daphne.return"(%[[Z]])
 // CHECK-NOT: daphne.ewMul
-func.func @mul_zero_lhs_scalar(%arg0: f64) -> f64 {
+func.func @mul_zero_lhs_int(%arg0: si64) -> si64 {
+    %0 = "daphne.constant"() {value = 0 : si64} : () -> si64
+    %1 = "daphne.ewMul"(%0, %arg0) : (si64, si64) -> si64
+    "daphne.return"(%1) : (si64) -> ()
+}
+
+// Absorbing-zero negative case: over a float element type the rewrite must not
+// fire, because NaN * 0.0 = NaN and Inf * 0.0 = NaN. The ewMul must survive.
+// CHECK-LABEL: func.func @mul_zero_float
+// CHECK: daphne.ewMul
+func.func @mul_zero_float(%arg0: f64) -> f64 {
     %0 = "daphne.constant"() {value = 0.0 : f64} : () -> f64
-    %1 = "daphne.ewMul"(%0, %arg0) : (f64, f64) -> f64
+    %1 = "daphne.ewMul"(%arg0, %0) : (f64, f64) -> f64
     "daphne.return"(%1) : (f64) -> ()
 }

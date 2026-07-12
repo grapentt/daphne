@@ -31,6 +31,18 @@ static Type getMatrixElementTypeOrNull(Value v) {
     return {};
 }
 
+// Returns true when `v` has an integer element type (matrix element type for a
+// matrix, the value type itself for a scalar). Absorbing/neutral rewrites that
+// discard an operand are only valid over integers: IEEE floating point has
+// NaN*0 = NaN, Inf*0 = NaN, and (-0.0)+0.0 = +0.0, none of which the algebraic
+// identity preserves.
+static bool hasIntegerElementType(Value v) {
+    Type elemTy = getMatrixElementTypeOrNull(v);
+    if (!elemTy)
+        elemTy = v.getType();
+    return llvm::isa<IntegerType>(elemTy);
+}
+
 // Returns true when `v` is a ConstantLike op whose scalar value is zero.
 static bool isConstantZero(Value v) {
     return matchPattern(v, m_Zero()) || matchPattern(v, m_AnyZeroFloat());
@@ -71,76 +83,6 @@ struct InvolutivePattern : public RewritePattern {
 };
 
 /**
- * @brief Collapses `f(f(x))` to `f(x)` for any op tagged `IdempotentUnary`.
- */
-struct IdempotentUnaryPattern : public RewritePattern {
-    IdempotentUnaryPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
-
-    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
-        if (!op->hasTrait<OpTrait::IdempotentUnary>())
-            return failure();
-        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-            return failure();
-
-        Operation *inner = op->getOperand(0).getDefiningOp();
-        if (!inner || inner->getName() != op->getName())
-            return failure();
-        if (inner->getNumOperands() != 1 || inner->getNumResults() != 1)
-            return failure();
-
-        rewriter.replaceOp(op, inner->getResult(0));
-        return success();
-    }
-};
-
-/**
- * @brief Collapses `f(x, x)` to `x` for any op tagged `IdempotentBinary`.
- */
-struct IdempotentBinaryPattern : public RewritePattern {
-    IdempotentBinaryPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
-
-    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
-        if (!op->hasTrait<OpTrait::IdempotentBinary>())
-            return failure();
-        if (op->getNumOperands() != 2 || op->getNumResults() != 1)
-            return failure();
-
-        Value lhs = op->getOperand(0);
-        Value rhs = op->getOperand(1);
-        if (lhs != rhs || lhs.getType() != op->getResult(0).getType())
-            return failure();
-
-        rewriter.replaceOp(op, lhs);
-        return success();
-    }
-};
-
-/**
- * @brief Collapses `f(f(x, y), y)` to `f(x, y)` for any op tagged `IdempotentOnSelf`.
- */
-struct IdempotentOnSelfPattern : public RewritePattern {
-    IdempotentOnSelfPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
-
-    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
-        if (!op->hasTrait<OpTrait::IdempotentOnSelf>())
-            return failure();
-        if (op->getNumOperands() != 2 || op->getNumResults() != 1)
-            return failure();
-
-        Operation *inner = op->getOperand(0).getDefiningOp();
-        if (!inner || inner->getName() != op->getName())
-            return failure();
-        if (inner->getNumOperands() != 2 || inner->getNumResults() != 1)
-            return failure();
-        if (inner->getOperand(1) != op->getOperand(1))
-            return failure();
-
-        rewriter.replaceOp(op, inner->getResult(0));
-        return success();
-    }
-};
-
-/**
  * @brief Replaces `f(X)` with `X` when X's element type is an integer.
  */
 struct IdentityOnIntegerElementTypePattern : public RewritePattern {
@@ -154,10 +96,7 @@ struct IdentityOnIntegerElementTypePattern : public RewritePattern {
             return failure();
 
         Value operand = op->getOperand(0);
-        Type elemTy = getMatrixElementTypeOrNull(operand);
-        if (!elemTy)
-            elemTy = operand.getType();
-        if (!llvm::isa<IntegerType>(elemTy))
+        if (!hasIntegerElementType(operand))
             return failure();
         if (operand.getType() != op->getResult(0).getType())
             return failure();
@@ -196,6 +135,11 @@ struct IdentityWhenSymmetricPattern : public RewritePattern {
 
 /**
  * @brief Replaces `f(x, 0)` with `x` for any op tagged `NeutralOnZeroRHS`.
+ *
+ * For `ewAdd` over a floating-point element type the rewrite is suppressed:
+ * `(-0.0) + 0.0` is `+0.0`, so `x + 0.0 -> x` would wrongly preserve a negative
+ * zero. Subtraction (`x - 0.0 = x`) is exact for all IEEE values, so `ewSub` is
+ * left unguarded.
  */
 struct NeutralOnZeroRHSPattern : public RewritePattern {
     NeutralOnZeroRHSPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
@@ -206,6 +150,8 @@ struct NeutralOnZeroRHSPattern : public RewritePattern {
         if (op->getNumOperands() != 2 || op->getNumResults() != 1)
             return failure();
         if (!isConstantZero(op->getOperand(1)))
+            return failure();
+        if (llvm::isa<daphne::EwAddOp>(op) && !hasIntegerElementType(op->getResult(0)))
             return failure();
 
         Value lhs = op->getOperand(0);
@@ -243,9 +189,10 @@ struct NeutralOnOneRHSPattern : public RewritePattern {
 /**
  * @brief Replaces `f(0, x)` with `0` for any op tagged `LeftAbsorbingOnZero`.
  *
- * Fires only when the zero operand's type equals the op's result type, so
- * broadcasting cases (scalar zero * matrix) do not accidentally shrink the
- * result to a scalar.
+ * Restricted to integer element types: over IEEE floating point the identity
+ * `0 * x = 0` is false (NaN * 0 = NaN, Inf * 0 = NaN). Fires only when the zero
+ * operand's type equals the op's result type, so broadcasting cases (scalar
+ * zero * matrix) do not accidentally shrink the result to a scalar.
  */
 struct LeftAbsorbingOnZeroPattern : public RewritePattern {
     LeftAbsorbingOnZeroPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
@@ -258,6 +205,8 @@ struct LeftAbsorbingOnZeroPattern : public RewritePattern {
         Value zero = op->getOperand(0);
         if (!isConstantZero(zero))
             return failure();
+        if (!hasIntegerElementType(op->getResult(0)))
+            return failure();
         if (zero.getType() != op->getResult(0).getType())
             return failure();
 
@@ -268,6 +217,9 @@ struct LeftAbsorbingOnZeroPattern : public RewritePattern {
 
 /**
  * @brief Replaces `f(x, 0)` with `0` for any op tagged `RightAbsorbingOnZero`.
+ *
+ * Restricted to integer element types for the same reason as
+ * `LeftAbsorbingOnZeroPattern`.
  */
 struct RightAbsorbingOnZeroPattern : public RewritePattern {
     RightAbsorbingOnZeroPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
@@ -280,61 +232,12 @@ struct RightAbsorbingOnZeroPattern : public RewritePattern {
         Value zero = op->getOperand(1);
         if (!isConstantZero(zero))
             return failure();
+        if (!hasIntegerElementType(op->getResult(0)))
+            return failure();
         if (zero.getType() != op->getResult(0).getType())
             return failure();
 
         rewriter.replaceOp(op, zero);
-        return success();
-    }
-};
-
-/**
- * @brief Replaces `f(X)` with `X` when X's row dimension is statically 1.
- *
- * Bails on unknown row dimension so the rewrite stays sound under imprecise
- * shape inference.
- */
-struct IdentityOnSingletonRowDimPattern : public RewritePattern {
-    IdentityOnSingletonRowDimPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
-
-    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
-        if (!op->hasTrait<OpTrait::IdentityOnSingletonRowDim>())
-            return failure();
-        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-            return failure();
-
-        Value operand = op->getOperand(0);
-        auto mt = llvm::dyn_cast<daphne::MatrixType>(operand.getType());
-        if (!mt || mt.getNumRows() != 1)
-            return failure();
-        if (operand.getType() != op->getResult(0).getType())
-            return failure();
-
-        rewriter.replaceOp(op, operand);
-        return success();
-    }
-};
-
-/**
- * @brief Replaces `f(X)` with `X` when X's column dimension is statically 1.
- */
-struct IdentityOnSingletonColDimPattern : public RewritePattern {
-    IdentityOnSingletonColDimPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
-
-    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
-        if (!op->hasTrait<OpTrait::IdentityOnSingletonColDim>())
-            return failure();
-        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-            return failure();
-
-        Value operand = op->getOperand(0);
-        auto mt = llvm::dyn_cast<daphne::MatrixType>(operand.getType());
-        if (!mt || mt.getNumCols() != 1)
-            return failure();
-        if (operand.getType() != op->getResult(0).getType())
-            return failure();
-
-        rewriter.replaceOp(op, operand);
         return success();
     }
 };
@@ -345,10 +248,9 @@ namespace mlir::daphne {
 
 void populateAlgebraicTraitPatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
-    patterns.add<InvolutivePattern, IdempotentUnaryPattern, IdempotentBinaryPattern, IdempotentOnSelfPattern,
-                 IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern, NeutralOnZeroRHSPattern,
-                 NeutralOnOneRHSPattern, LeftAbsorbingOnZeroPattern, RightAbsorbingOnZeroPattern,
-                 IdentityOnSingletonRowDimPattern, IdentityOnSingletonColDimPattern>(ctx);
+    patterns.add<InvolutivePattern, IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern,
+                 NeutralOnZeroRHSPattern, NeutralOnOneRHSPattern, LeftAbsorbingOnZeroPattern,
+                 RightAbsorbingOnZeroPattern>(ctx);
 }
 
 } // namespace mlir::daphne
