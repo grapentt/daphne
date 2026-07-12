@@ -51,10 +51,27 @@ bool isBoolAttrPair(Attribute a, Attribute b) { return llvm::isa<BoolAttr>(a) &&
 template <typename AttrKind>
 std::pair<AttrKind, AttrKind> promoteWidth(AttrKind lhs, AttrKind rhs, Location loc);
 
-template <> std::pair<FloatAttr, FloatAttr> promoteWidth(FloatAttr lhs, FloatAttr rhs, Location /*loc*/) {
-    // FloatAttr::getValueAsDouble already normalises to double for our purposes;
-    // we return the originals since op lambdas operate on APFloat directly.
-    return {lhs, rhs};
+template <> std::pair<FloatAttr, FloatAttr> promoteWidth(FloatAttr lhs, FloatAttr rhs, Location loc) {
+    // Match the legacy templates: promote the narrower float operand to the
+    // wider one's semantics before the op lambda runs. Without this an op
+    // lambda computing e.g. `a + b` would feed APFloat::operator+ two values
+    // with mismatched semantics (UB / debug assert). This can happen because
+    // --canonicalize runs before type inference has unified operand widths.
+    const llvm::fltSemantics &lSem = lhs.getValue().getSemantics();
+    const llvm::fltSemantics &rSem = rhs.getValue().getSemantics();
+    if (&lSem == &rSem)
+        return {lhs, rhs};
+    unsigned lw = llvm::APFloat::semanticsSizeInBits(lSem);
+    unsigned rw = llvm::APFloat::semanticsSizeInBits(rSem);
+    bool losesInfo = false;
+    if (lw < rw) {
+        llvm::APFloat ext = lhs.getValue();
+        ext.convert(rSem, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+        return {llvm::cast<FloatAttr>(FloatAttr::getChecked(loc, rhs.getType(), ext)), rhs};
+    }
+    llvm::APFloat ext = rhs.getValue();
+    ext.convert(lSem, llvm::APFloat::rmNearestTiesToEven, &losesInfo);
+    return {lhs, llvm::cast<FloatAttr>(FloatAttr::getChecked(loc, lhs.getType(), ext))};
 }
 
 template <> std::pair<IntegerAttr, IntegerAttr> promoteWidth(IntegerAttr lhs, IntegerAttr rhs, Location loc) {
@@ -100,7 +117,7 @@ static Attribute foldScalarUnary(ScalarConstantFoldable op, Attribute operand, T
 }
 
 // -------------------------------------------------------------------------
-// Binary driver — arithmetic (numeric in, numeric out)
+// Binary driver: arithmetic (numeric in, numeric out)
 // -------------------------------------------------------------------------
 
 static Attribute foldScalarArithBinary(ScalarConstantFoldable op, Attribute lhs, Attribute rhs, Type resultType,
@@ -129,26 +146,32 @@ static Attribute foldScalarArithBinary(ScalarConstantFoldable op, Attribute lhs,
             if (auto v = op.foldScalarUInt(l.getValue(), r.getValue()))
                 return IntegerAttr::getChecked(loc, resultType, *v);
         }
-        // Signless / Index intentionally not folded — matches the legacy
+        // Signless / Index intentionally not folded, matching the legacy
         // Fold.cpp templates, which key off isSignedInteger()/isUnsignedInteger().
     }
     return {};
 }
 
 // -------------------------------------------------------------------------
-// Binary driver — comparison (numeric in, bool out)
+// Binary driver: comparison (numeric in, bool out)
 // -------------------------------------------------------------------------
 
 static Attribute foldScalarCmpBinary(ScalarConstantFoldable op, Attribute lhs, Attribute rhs, Type resultType,
                                      Location loc) {
     // A comparison yields a truth value, but DAPHNE represents it in the op's
-    // (numeric) result type rather than i1 — matching the legacy Fold.cpp
+    // (numeric) result type rather than i1, matching the legacy Fold.cpp
     // comparison folders, which materialised the bool into `getType()`. So a
     // float-typed comparison result is a FloatAttr holding 0.0/1.0, and an
     // integer-typed one is an IntegerAttr holding 0/1.
     auto materialize = [&](bool v) -> Attribute {
-        if (llvm::isa<FloatType>(resultType))
-            return FloatAttr::getChecked(loc, resultType, llvm::APFloat(v ? 1.0 : 0.0));
+        if (auto floatTy = llvm::dyn_cast<FloatType>(resultType)) {
+            // Build the 0.0/1.0 truth value directly in the result type's
+            // float semantics. A bare `APFloat(double)` is always IEEEdouble,
+            // which `FloatAttr::verify` rejects for a narrower result type
+            // (e.g. f32), silently dropping the fold.
+            llvm::APFloat truth(floatTy.getFloatSemantics(), v ? "1.0" : "0.0");
+            return FloatAttr::getChecked(loc, resultType, truth);
+        }
         return IntegerAttr::getChecked(loc, resultType, v ? 1 : 0);
     };
 
@@ -160,9 +183,9 @@ static Attribute foldScalarCmpBinary(ScalarConstantFoldable op, Attribute lhs, A
     if (isIntAttrPair(lhs, rhs)) {
         auto [l, r] = promoteWidth(llvm::cast<IntegerAttr>(lhs), llvm::cast<IntegerAttr>(rhs), loc);
         Type argTy = l.getType();
-        // Comparison signedness follows the *input* type, unlike arithmetic
+        // Comparison signedness follows the input type, unlike arithmetic
         // where the result type carries it. Signless / index inputs are not
-        // folded — matches the legacy Fold.cpp templates which keyed off
+        // folded, matching the legacy Fold.cpp templates which keyed off
         // isSignedInteger() / isUnsignedInteger() explicitly.
         if (auto intTy = llvm::dyn_cast<IntegerType>(argTy); intTy && intTy.isUnsigned()) {
             if (auto v = op.foldScalarCmpUInt(l.getValue(), r.getValue()))
@@ -195,7 +218,7 @@ Attribute foldScalarOp(ScalarConstantFoldable op, ArrayRef<Attribute> operands, 
     // Comparison ops (numeric in, truth value out) carry the ValueTypeCmp
     // trait; every other binary op is arithmetic (numeric in, numeric out).
     // Dispatch on the trait rather than the result type: ValueTypeCmp gives a
-    // comparison the most-general *argument* value type (e.g. si64/f64), never
+    // comparison the most-general argument value type (e.g. si64/f64), never
     // i1, so an i1-result heuristic would never route comparisons here.
     const bool isCmp = op->hasTrait<OpTrait::ValueTypeCmp>();
     return isCmp ? foldScalarCmpBinary(op, operands[0], operands[1], resultType, loc)

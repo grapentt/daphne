@@ -94,15 +94,26 @@ func.func @add_nonzero_scalar(%arg0: f64) -> f64 {
 }
 
 // NeutralOnZeroRHS on EwSubOp: x - 0 collapses to x. This stays valid over
-// floats too: x - 0.0 = x is exact for every IEEE value (including signed
-// zero), so unlike ewAdd it is not gated to integers. Exercising the second
-// adopter also catches a broken trait attachment on EwSubOp independently.
+// floats for a *positive* zero RHS (x - 0.0 = x is exact for every IEEE value),
+// so unlike ewAdd it is not gated to integers. Exercising the second adopter
+// also catches a broken trait attachment on EwSubOp independently.
 // CHECK-LABEL: func.func @sub_zero_scalar
 // CHECK-SAME: (%[[ARG:.*]]: f64) -> f64
 // CHECK-NEXT: "daphne.return"(%[[ARG]])
 // CHECK-NOT: daphne.ewSub
 func.func @sub_zero_scalar(%arg0: f64) -> f64 {
     %0 = "daphne.constant"() {value = 0.0 : f64} : () -> f64
+    %1 = "daphne.ewSub"(%arg0, %0) : (f64, f64) -> f64
+    "daphne.return"(%1) : (f64) -> ()
+}
+
+// NeutralOnZeroRHS negative case: a *negative* zero RHS must NOT be dropped.
+// x - (-0.0) = x + 0.0, which flips a -0.0 argument to +0.0, so the identity
+// fails for negative zero and the ewSub must survive.
+// CHECK-LABEL: func.func @sub_neg_zero_scalar
+// CHECK: daphne.ewSub
+func.func @sub_neg_zero_scalar(%arg0: f64) -> f64 {
+    %0 = "daphne.constant"() {value = -0.0 : f64} : () -> f64
     %1 = "daphne.ewSub"(%arg0, %0) : (f64, f64) -> f64
     "daphne.return"(%1) : (f64) -> ()
 }

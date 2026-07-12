@@ -43,9 +43,12 @@ static bool hasIntegerElementType(Value v) {
     return llvm::isa<IntegerType>(elemTy);
 }
 
-// Returns true when `v` is a ConstantLike op whose scalar value is zero.
+// Returns true when `v` is a ConstantLike op whose scalar value is zero. Over
+// floats only *positive* zero counts: negative zero is excluded because the
+// neutral/absorbing identities do not hold for it (e.g. x - (-0.0) = x + 0.0
+// flips -0.0 to +0.0), so a rewrite that discarded it would miscompute.
 static bool isConstantZero(Value v) {
-    return matchPattern(v, m_Zero()) || matchPattern(v, m_AnyZeroFloat());
+    return matchPattern(v, m_Zero()) || matchPattern(v, m_PosZeroFloat());
 }
 
 // Returns true when `v` is a ConstantLike op whose scalar value is one.
@@ -136,10 +139,11 @@ struct IdentityWhenSymmetricPattern : public RewritePattern {
 /**
  * @brief Replaces `f(x, 0)` with `x` for any op tagged `NeutralOnZeroRHS`.
  *
- * For `ewAdd` over a floating-point element type the rewrite is suppressed:
- * `(-0.0) + 0.0` is `+0.0`, so `x + 0.0 -> x` would wrongly preserve a negative
- * zero. Subtraction (`x - 0.0 = x`) is exact for all IEEE values, so `ewSub` is
- * left unguarded.
+ * `isConstantZero` already excludes a negative-zero RHS (see there). On top of
+ * that, `ewAdd` is suppressed over any floating-point element type, because
+ * `(-0.0) + 0.0` is `+0.0`: even a positive-zero RHS would drop a negative-zero
+ * lhs. `ewSub` needs no such guard, since `x - 0.0 = x` holds for every IEEE
+ * value once a negative-zero RHS is ruled out.
  */
 struct NeutralOnZeroRHSPattern : public RewritePattern {
     NeutralOnZeroRHSPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
