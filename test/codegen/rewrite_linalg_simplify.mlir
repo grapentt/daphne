@@ -130,3 +130,48 @@ func.func @col_scale_transposed(%x: !daphne.Matrix<3x4xf64>, %v: !daphne.Matrix<
     %p = "daphne.matMul"(%x, %d, %false, %true) : (!daphne.Matrix<3x4xf64>, !daphne.Matrix<4x4xf64>, i1, i1) -> !daphne.Matrix<3x4xf64>
     "daphne.return"(%p) : (!daphne.Matrix<3x4xf64>) -> ()
 }
+
+// The emitted ewMul must NOT inherit the sparsity/symmetry inferred for the ops
+// it replaces: those properties describe a matrix product (or, for the trace
+// idiom, the left factor), not the element-wise result, so the rewrites reset
+// them to unknown for a later inference pass to re-derive. Inference does not
+// re-run on the default pipeline after this pass, so a leaked value would
+// persist, so these cases lock the reset in.
+
+// Row scaling: the matMul result carries a concrete sparsity, and the emitted
+// ewMul must drop it (result type is a plain 3x4xf64, no sp[...] annotation).
+// CHECK-LABEL: func.func @row_scale_resets_sparsity
+// CHECK: %[[M:.*]] = "daphne.ewMul"
+// CHECK-SAME: -> !daphne.Matrix<3x4xf64>
+func.func @row_scale_resets_sparsity(%v: !daphne.Matrix<3x1xf64>, %x: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64:sp[5.000000e-01]> {
+    %false = "daphne.constant"() <{value = false}> : () -> i1
+    %d = "daphne.diagMatrix"(%v) : (!daphne.Matrix<3x1xf64>) -> !daphne.Matrix<3x3xf64>
+    %p = "daphne.matMul"(%d, %x, %false, %false) : (!daphne.Matrix<3x3xf64>, !daphne.Matrix<3x4xf64>, i1, i1) -> !daphne.Matrix<3x4xf64:sp[5.000000e-01]>
+    "daphne.return"(%p) : (!daphne.Matrix<3x4xf64:sp[5.000000e-01]>) -> ()
+}
+
+// Column scaling: same invariant, the concrete matMul sparsity must not reach
+// the ewMul result.
+// CHECK-LABEL: func.func @col_scale_resets_sparsity
+// CHECK: %[[M:.*]] = "daphne.ewMul"
+// CHECK-SAME: -> !daphne.Matrix<3x4xf64>
+func.func @col_scale_resets_sparsity(%x: !daphne.Matrix<3x4xf64>, %v: !daphne.Matrix<4x1xf64>) -> !daphne.Matrix<3x4xf64:sp[2.500000e-01]> {
+    %false = "daphne.constant"() <{value = false}> : () -> i1
+    %d = "daphne.diagMatrix"(%v) : (!daphne.Matrix<4x1xf64>) -> !daphne.Matrix<4x4xf64>
+    %p = "daphne.matMul"(%x, %d, %false, %false) : (!daphne.Matrix<3x4xf64>, !daphne.Matrix<4x4xf64>, i1, i1) -> !daphne.Matrix<3x4xf64:sp[2.500000e-01]>
+    "daphne.return"(%p) : (!daphne.Matrix<3x4xf64:sp[2.500000e-01]>) -> ()
+}
+
+// Trace idiom: the left factor X carries a concrete sparsity; the emitted ewMul
+// result must reset it (X remains its own type as an operand, only the product's
+// result type is reset). Also exercises a symmetric matMul result being dropped.
+// CHECK-LABEL: func.func @trace_idiom_resets_props
+// CHECK: %[[M:.*]] = "daphne.ewMul"
+// CHECK-SAME: -> !daphne.Matrix<3x3xf64>
+func.func @trace_idiom_resets_props(%x: !daphne.Matrix<3x3xf64:sp[3.000000e-01]>, %y: !daphne.Matrix<3x3xf64>) -> f64 {
+    %false = "daphne.constant"() <{value = false}> : () -> i1
+    %p = "daphne.matMul"(%x, %y, %false, %false) : (!daphne.Matrix<3x3xf64:sp[3.000000e-01]>, !daphne.Matrix<3x3xf64>, i1, i1) -> !daphne.Matrix<3x3xf64:symmetric[true]>
+    %d = "daphne.diagVector"(%p) : (!daphne.Matrix<3x3xf64:symmetric[true]>) -> !daphne.Matrix<3x1xf64>
+    %s = "daphne.sumAll"(%d) : (!daphne.Matrix<3x1xf64>) -> f64
+    "daphne.return"(%s) : (f64) -> ()
+}

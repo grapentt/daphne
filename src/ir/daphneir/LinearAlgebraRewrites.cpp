@@ -92,10 +92,18 @@ struct TraceIdiomPattern : public OpRewritePattern<daphne::AllAggSumOp> {
         // given concrete result types computed from the known extents: shape
         // inference has already run by the time this pass fires, so a shape left
         // unknown here would never be resolved and kernel dispatch would fail.
+        // The element-wise product's sparsity and symmetry, however, are NOT X's:
+        // an element-wise product is at most as dense as either factor, so
+        // reusing X's type would over-state the density (and X's symmetry says
+        // nothing about X * t(Y)). Reset both to unknown so a later inference pass
+        // derives them, rather than baking in a wrong value that representation
+        // selection would then consume.
+        auto xMatTy = llvm::cast<daphne::MatrixType>(x.getType());
         auto yMatTy = llvm::cast<daphne::MatrixType>(y.getType());
         Value transposedY =
             rewriter.create<daphne::TransposeOp>(matMulOp.getLoc(), yMatTy.withShape(*colsY, *rowsY), y);
-        Value ewMul = rewriter.create<daphne::EwMulOp>(sumOp.getLoc(), x.getType(), x, transposedY);
+        Type ewMulTy = xMatTy.withSparsity(-1.0).withSymmetric(daphne::BoolOrUnknown::Unknown);
+        Value ewMul = rewriter.create<daphne::EwMulOp>(sumOp.getLoc(), ewMulTy, x, transposedY);
         rewriter.replaceOpWithNewOp<daphne::AllAggSumOp>(sumOp, sumOp.getResult().getType(), ewMul);
         return success();
     }
@@ -160,8 +168,13 @@ struct RowScalePattern : public OpRewritePattern<daphne::MatMulOp> {
 
         // X * v: matrix as lhs, column vector as rhs (the only order the
         // broadcast kernel handles, and the order EwMul's canonicalizer leaves
-        // untouched since neither operand is a scalar).
-        rewriter.replaceOpWithNewOp<daphne::EwMulOp>(matMulOp, matMulOp.getResult().getType(), x, v);
+        // untouched since neither operand is a scalar). The product's shape
+        // matches diag(v) @ X, so reuse the matmul's extents, but reset sparsity
+        // and symmetry to unknown: they describe the matrix product, not the
+        // element-wise scaling, so leave them for a later inference pass to derive.
+        auto resTy = llvm::cast<daphne::MatrixType>(matMulOp.getResult().getType());
+        Type ewMulTy = resTy.withSparsity(-1.0).withSymmetric(daphne::BoolOrUnknown::Unknown);
+        rewriter.replaceOpWithNewOp<daphne::EwMulOp>(matMulOp, ewMulTy, x, v);
         return success();
     }
 };
@@ -235,9 +248,15 @@ struct ColScalePattern : public OpRewritePattern<daphne::MatMulOp> {
         // neither operand is a scalar). t(v) is given a concrete 1 x m result type:
         // shape inference has already run by the time this pass fires, so a shape
         // left unknown here would never be resolved and kernel dispatch would fail.
+        // The product's shape matches X @ diag(v), so reuse the matmul's extents,
+        // but reset sparsity and symmetry to unknown: they describe the matrix
+        // product, not the element-wise scaling, so leave them for a later
+        // inference pass to derive.
         auto vMatTy = llvm::cast<daphne::MatrixType>(v.getType());
         Value tv = rewriter.create<daphne::TransposeOp>(matMulOp.getLoc(), vMatTy.withShape(1, *rowsV), v);
-        rewriter.replaceOpWithNewOp<daphne::EwMulOp>(matMulOp, matMulOp.getResult().getType(), x, tv);
+        auto resTy = llvm::cast<daphne::MatrixType>(matMulOp.getResult().getType());
+        Type ewMulTy = resTy.withSparsity(-1.0).withSymmetric(daphne::BoolOrUnknown::Unknown);
+        rewriter.replaceOpWithNewOp<daphne::EwMulOp>(matMulOp, ewMulTy, x, tv);
         return success();
     }
 };
