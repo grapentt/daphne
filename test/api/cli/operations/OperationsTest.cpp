@@ -164,6 +164,26 @@ TEST_CASE("operator_at_symmetry_inference", TAG_OPERATIONS) {
                            "numCols=4", "checkSymmetry=false");
 
     CHECK(status == StatusCode::SUCCESS);
-    // Both matmul results (t(X) @ X and X @ t(X)) must carry the inferred symmetric property.
-    CHECK_THAT(err.str(), Catch::Contains("symmetric[true]"));
+    // Both matmul results (t(X) @ X and X @ t(X)) must carry the inferred symmetric property, so the dump must contain
+    // the annotation at least twice. A bare Contains() would pass even if only one of the two paths (folded vs.
+    // un-folded syrk shape) inferred symmetry, so count occurrences instead.
+    const std::string dump = err.str();
+    size_t symCount = 0;
+    for (size_t pos = dump.find("symmetric[true]"); pos != std::string::npos;
+         pos = dump.find("symmetric[true]", pos + 1))
+        ++symCount;
+    CHECK(symCount >= 2);
+}
+
+TEST_CASE("operator_at_non_syrk_not_symmetric", TAG_OPERATIONS) {
+    // Negative counterpart to operator_at_symmetry_inference: a plain product of two distinct matrices `X @ Y` has no
+    // syrk shape and is not symmetric in general, so inference must NOT annotate its result symmetric[true]. Guards
+    // against an over-eager MatMulOp::inferSymmetric that returns True for any product.
+    std::string scriptFilePath = dirPath + "operator_at_non_syrk.daphne";
+
+    std::stringstream out, err;
+    int status = runDaphne(out, err, "--explain", "property_inference", scriptFilePath.c_str());
+
+    CHECK(status == StatusCode::SUCCESS);
+    CHECK_THAT(err.str(), !Catch::Contains("symmetric[true]"));
 }
