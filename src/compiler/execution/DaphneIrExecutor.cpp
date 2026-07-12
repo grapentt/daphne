@@ -159,10 +159,10 @@ bool DaphneIrExecutor::runPasses(mlir::ModuleOp module) {
         pm.addNestedPass<mlir::func::FuncOp>(mlir::daphne::createInferencePass());
         // Simplify the IR.
         pm.addPass(mlir::createCanonicalizerPass());
-        // Remove unused ops exposed by the columnar rewrite and canonicalization.
-        // One CSE pass is sufficient: MLIR's CSE walks the dominance tree once
-        // and hashes (op-name, operands, attributes, result-types), so pure ops
-        // are canonicalized in a single visit.
+        // Remove duplicate ops exposed by the columnar rewrite and
+        // canonicalization. One CSE pass is enough (was previously looped
+        // five times): CSE visits each op after its operands, so a whole
+        // duplicated chain collapses in a single pass.
         pm.addPass(mlir::createCSEPass());
     }
     if (userConfig_.explain_columnar)
@@ -318,8 +318,8 @@ void DaphneIrExecutor::buildCodegenPipeline(mlir::PassManager &pm) {
     // pm.addPass(mlir::daphne::createPrintIRPass("IR after createConvertDaphneToLinalgPass"));
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgGeneralizeNamedOpsPass());
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createLinalgElementwiseOpFusionPass());
-    // Elementwise fusion often exposes duplicate memref/tensor ops that are
-    // eligible for CSE now that the surrounding ops carry the Pure trait.
+    // Elementwise fusion often exposes duplicate memref/tensor/linalg ops;
+    // run CSE once to deduplicate them before the next stage.
     pm.addNestedPass<mlir::func::FuncOp>(mlir::createCSEPass());
     // pm.addPass(mlir::daphne::createPrintIRPass("IR after LinalgPasses"));
 
