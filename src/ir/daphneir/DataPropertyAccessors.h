@@ -24,12 +24,11 @@
 
 #include <optional>
 
-// Fail-closed accessors for the inferred data properties (shape, sparsity,
-// symmetry) that DAPHNE stores on the MLIR type of a matrix or frame value. Each
-// accessor returns std::nullopt when the property is unknown, either because
-// the type is not a matrix/frame or because the property still holds its
-// "unknown" sentinel (numRows/numCols == -1, sparsity == -1.0, symmetric ==
-// BoolOrUnknown::Unknown).
+// Fail-closed accessors for the inferred data properties (shape, sparsity) that
+// DAPHNE stores on the MLIR type of a matrix or frame value. Each accessor
+// returns std::nullopt when the property is unknown, either because the type
+// is not a matrix/frame or because the property still holds its "unknown"
+// sentinel (numRows/numCols == -1, sparsity == -1.0).
 //
 // This matters because the canonicalizer runs both before property inference has
 // filled these in and after it, so a rewrite may see a property unknown.
@@ -55,36 +54,10 @@ std::optional<ssize_t> knownNumCols(mlir::Type type);
 // if the sparsity is unknown or `type` is not a matrix. Frames carry no sparsity.
 std::optional<double> knownSparsity(mlir::Type type);
 
-// Returns the statically known symmetry of `type` as a bool, or nullopt if the
-// symmetry is unknown or `type` is not a matrix. Frames carry no symmetry.
-std::optional<bool> knownSymmetric(mlir::Type type);
-
 // Convenience overloads reading the property off the type of a value.
 inline std::optional<ssize_t> knownNumRows(mlir::Value value) { return knownNumRows(value.getType()); }
 inline std::optional<ssize_t> knownNumCols(mlir::Value value) { return knownNumCols(value.getType()); }
 inline std::optional<double> knownSparsity(mlir::Value value) { return knownSparsity(value.getType()); }
-inline std::optional<bool> knownSymmetric(mlir::Value value) { return knownSymmetric(value.getType()); }
-
-// Boolean predicates for the common "known-and-true / known-and-false" query,
-// where the caller does not need the value itself. Each is fail-closed: an
-// unknown property yields false. Note that isKnownSymmetric and
-// isKnownNonSymmetric are NOT negations of each other: both are false while
-// symmetry is unknown.
-
-// True iff both extents of `type` are statically known.
-inline bool hasKnownShape(mlir::Type type) { return knownNumRows(type) && knownNumCols(type); }
-inline bool hasKnownShape(mlir::Value value) { return hasKnownShape(value.getType()); }
-
-// True iff `type` is known to be symmetric.
-inline bool isKnownSymmetric(mlir::Type type) { return knownSymmetric(type).value_or(false); }
-inline bool isKnownSymmetric(mlir::Value value) { return isKnownSymmetric(value.getType()); }
-
-// True iff `type` is known to be non-symmetric (symmetry inferred as false).
-inline bool isKnownNonSymmetric(mlir::Type type) {
-    std::optional<bool> sym = knownSymmetric(type);
-    return sym && !*sym;
-}
-inline bool isKnownNonSymmetric(mlir::Value value) { return isKnownNonSymmetric(value.getType()); }
 
 } // namespace mlir::daphne
 

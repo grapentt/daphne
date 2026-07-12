@@ -21,9 +21,9 @@
 #include "llvm/Support/Casting.h"
 
 // The sentinel values below mirror the "reset" defaults of MatrixType/FrameType
-// (see DaphneTypes.td): an unknown extent is -1, an unknown sparsity is -1.0, and
-// an unknown symmetry is BoolOrUnknown::Unknown. A property is known iff it
-// differs from its sentinel, matching the checks in MatrixType::isSpecializationOf.
+// (see DaphneTypes.td): an unknown extent is -1 and an unknown sparsity is -1.0.
+// A property is known iff it differs from its sentinel, matching the checks in
+// MatrixType::isSpecializationOf.
 
 std::optional<ssize_t> mlir::daphne::knownNumRows(mlir::Type type) {
     if (auto mt = llvm::dyn_cast<mlir::daphne::MatrixType>(type)) {
@@ -51,15 +51,6 @@ std::optional<double> mlir::daphne::knownSparsity(mlir::Type type) {
     if (auto mt = llvm::dyn_cast<mlir::daphne::MatrixType>(type)) {
         if (mt.getSparsity() != -1.0)
             return mt.getSparsity();
-    }
-    return std::nullopt;
-}
-
-std::optional<bool> mlir::daphne::knownSymmetric(mlir::Type type) {
-    if (auto mt = llvm::dyn_cast<mlir::daphne::MatrixType>(type)) {
-        BoolOrUnknown symmetric = mt.getSymmetric();
-        if (symmetric != BoolOrUnknown::Unknown)
-            return symmetric == BoolOrUnknown::True;
     }
     return std::nullopt;
 }
