@@ -87,11 +87,15 @@ struct TraceIdiomPattern : public OpRewritePattern<daphne::AllAggSumOp> {
         if (*colsX != *rowsY || *rowsX != *colsY)
             return failure();
 
-        // sum(X * t(Y)): the transpose gives an m x n matrix matching X, so the
-        // element-wise product needs no broadcasting.
-        Value transposedY = rewriter.create<daphne::TransposeOp>(matMulOp.getLoc(), y);
-        Value ewMul = rewriter.create<daphne::EwMulOp>(sumOp.getLoc(), daphne::UnknownType::get(getContext()), x,
-                                                       transposedY);
+        // sum(X * t(Y)): t(Y) is an m x n matrix matching X, so the element-wise
+        // product needs no broadcasting and has X's shape. Both created ops are
+        // given concrete result types computed from the known extents: shape
+        // inference has already run by the time this pass fires, so a shape left
+        // unknown here would never be resolved and kernel dispatch would fail.
+        auto yMatTy = llvm::cast<daphne::MatrixType>(y.getType());
+        Value transposedY =
+            rewriter.create<daphne::TransposeOp>(matMulOp.getLoc(), yMatTy.withShape(*colsY, *rowsY), y);
+        Value ewMul = rewriter.create<daphne::EwMulOp>(sumOp.getLoc(), x.getType(), x, transposedY);
         rewriter.replaceOpWithNewOp<daphne::AllAggSumOp>(sumOp, sumOp.getResult().getType(), ewMul);
         return success();
     }

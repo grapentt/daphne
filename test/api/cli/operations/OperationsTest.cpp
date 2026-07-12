@@ -188,6 +188,16 @@ TEST_CASE("operator_at_non_syrk_not_symmetric", TAG_OPERATIONS) {
     CHECK_THAT(err.str(), !Catch::Contains("symmetric[true]"));
 }
 
+// Numerically proves the trace idiom `sum(diagVector(X @ Y)) -> sum(X * t(Y))`
+// end-to-end through the full compiler. The `.daphne` script extracts the
+// diagonal of the product so the rewrite fires; the `.ref.daphne` script sums
+// the same trace by masking the product with an identity matrix, a chain the
+// rewrite cannot match. Their outputs must agree byte for byte, which guards
+// the transpose shape and operand pairing that the rewrite creates (a dropped
+// transpose or wrong shape would make the emitted element-wise product
+// dimensionally incoherent rather than throw).
+TEST_CASE("rewrite_trace", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_trace", 1); }
+
 // Numerically proves the row-scaling rewrite `diag(v) @ X -> X * v` end-to-end
 // through the full compiler. The `.daphne` script uses diagMatrix() so the
 // rewrite fires; the `.ref.daphne` script forms the same product via a plain
