@@ -768,7 +768,7 @@ def Daphne_ReshapeOp : Daphne_Op<"reshape", [
 }
 
 def Daphne_TransposeOp : Daphne_Op<"transpose", [
-    TypeFromFirstArg,
+    TypeFromFirstArg, Involutive,
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
     NumRowsFromArgNumCols, NumColsFromArgNumRows, SparsityFromArg, CUDASupport,
     DeclareOpInterfaceMethods<InferSymmetricOpInterface>,
@@ -807,7 +807,7 @@ def Daphne_RowBindOp : Daphne_BindOp<"rowBind", [
 ]>;
 
 def Daphne_ReverseOp : Daphne_Op<"reverse", [
-    TypeFromFirstArg, ShapeFromArg, Pure
+    TypeFromFirstArg, ShapeFromArg, Involutive, Pure
 ]> {
     let arguments = (ins MatrixOrU:$arg);
     let results = (outs MatrixOrU:$res);

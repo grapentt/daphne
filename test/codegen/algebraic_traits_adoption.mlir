@@ -184,3 +184,46 @@ func.func @mul_zero_float(%arg0: f64) -> f64 {
     %1 = "daphne.ewMul"(%arg0, %0) : (f64, f64) -> f64
     "daphne.return"(%1) : (f64) -> ()
 }
+
+// Involutive on TransposeOp: t(t(X)) collapses to X. The element type is
+// unchanged, but the shape swaps back, so this also confirms the pattern's
+// type-equality guard admits a shape-swapping involution on a rectangular
+// matrix (the inner input type equals the outer result type).
+// CHECK-LABEL: func.func @transpose_double_rectangular
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+// CHECK-NEXT: "daphne.return"(%[[ARG]])
+// CHECK-NOT: daphne.transpose
+func.func @transpose_double_rectangular(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64> {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x3xf64>
+    %1 = "daphne.transpose"(%0) : (!daphne.Matrix<4x3xf64>) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%1) : (!daphne.Matrix<3x4xf64>) -> ()
+}
+
+// Involutive negative case: a single transpose must survive.
+// CHECK-LABEL: func.func @transpose_single
+// CHECK: daphne.transpose
+func.func @transpose_single(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x3xf64> {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x3xf64>
+    "daphne.return"(%0) : (!daphne.Matrix<4x3xf64>) -> ()
+}
+
+// Involutive on ReverseOp: reverse(reverse(X)) collapses to X. Exercises a
+// second Involutive adopter so a broken attachment on ReverseOp is caught
+// independently of TransposeOp.
+// CHECK-LABEL: func.func @reverse_double
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+// CHECK-NEXT: "daphne.return"(%[[ARG]])
+// CHECK-NOT: daphne.reverse
+func.func @reverse_double(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64> {
+    %0 = "daphne.reverse"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    %1 = "daphne.reverse"(%0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%1) : (!daphne.Matrix<3x4xf64>) -> ()
+}
+
+// Involutive negative case: a single reverse must survive.
+// CHECK-LABEL: func.func @reverse_single
+// CHECK: daphne.reverse
+func.func @reverse_single(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64> {
+    %0 = "daphne.reverse"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    "daphne.return"(%0) : (!daphne.Matrix<3x4xf64>) -> ()
+}
