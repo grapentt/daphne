@@ -241,3 +241,12 @@ TEST_CASE("rewrite_row_agg_dim1", TAG_OPERATIONS) { compareDaphneToSelfRefSimple
 // multiply must print the same byte pattern. This is the one property a reviewer
 // cannot check by inspection, so it is proved through the full compiler.
 TEST_CASE("rewrite_repeated_add", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_repeated_add", 1); }
+
+// Numerically proves the broadcast-minimization rewrite
+// `(M1 + s1) + (M2 + s2) -> (M1 + M2) + (s1 + s2)` end-to-end. The scalars sum
+// past 2^63 so the scalar add overflows si64; integer addition is associative in
+// Z/2^64, so the `.daphne` and already-regrouped `.ref` forms must print the same
+// wrapped result.
+TEST_CASE("rewrite_broadcast_min", TAG_OPERATIONS) {
+    compareDaphneToSelfRefSimple(dirPath, "rewrite_broadcast_min", 1);
+}

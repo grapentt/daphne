@@ -356,3 +356,85 @@ func.func @add_scaled_leaf_nonconst(%x: !daphne.Matrix<2x3xsi64>, %c: si64) -> !
     %r = "daphne.ewAdd"(%m, %x) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
     "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
 }
+
+// Broadcast minimization: (M1 + s1) + (M2 + s2) is regrouped to
+// (M1 + M2) + (s1 + s2), summing the scalars once instead of broadcasting twice.
+// The result is one matrix add feeding one matrix-plus-scalar broadcast; the two
+// inner scalar broadcasts are gone.
+// CHECK-LABEL: func.func @broadcast_min
+// CHECK: %[[SS:.*]] = "daphne.ewAdd"(%{{.*}}, %{{.*}}) : (si64, si64) -> si64
+// CHECK: %[[MS:.*]] = "daphne.ewAdd"(%{{.*}}, %{{.*}}) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>)
+// CHECK: "daphne.ewAdd"(%[[MS]], %[[SS]])
+func.func @broadcast_min(%m1: !daphne.Matrix<2x3xsi64>, %s1: si64, %m2: !daphne.Matrix<2x3xsi64>, %s2: si64)
+        -> !daphne.Matrix<2x3xsi64> {
+    %a = "daphne.ewAdd"(%m1, %s1) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %b = "daphne.ewAdd"(%m2, %s2) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%a, %b) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// A scalar may sit on either side of an inner add (EwAdd is not commutative, so
+// both positions are matched). Here the first inner add has the scalar as its
+// lhs; the regrouping still fires.
+// CHECK-LABEL: func.func @broadcast_min_scalar_lhs
+// CHECK: "daphne.ewAdd"(%{{.*}}, %{{.*}}) : (si64, si64) -> si64
+// CHECK: "daphne.ewAdd"(%{{.*}}, %{{.*}}) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>)
+func.func @broadcast_min_scalar_lhs(%m1: !daphne.Matrix<2x3xsi64>, %s1: si64, %m2: !daphne.Matrix<2x3xsi64>, %s2: si64)
+        -> !daphne.Matrix<2x3xsi64> {
+    %a = "daphne.ewAdd"(%s1, %m1) : (si64, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    %b = "daphne.ewAdd"(%m2, %s2) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%a, %b) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// Negative case: integer-only, because float addition is not associative.
+// Regrouping distinct float addends would change rounding, so the ewAdds must
+// survive over a float element type.
+// CHECK-LABEL: func.func @broadcast_min_float
+// CHECK-COUNT-3: daphne.ewAdd
+func.func @broadcast_min_float(%m1: !daphne.Matrix<2x3xf64>, %s1: f64, %m2: !daphne.Matrix<2x3xf64>, %s2: f64)
+        -> !daphne.Matrix<2x3xf64> {
+    %a = "daphne.ewAdd"(%m1, %s1) : (!daphne.Matrix<2x3xf64>, f64) -> !daphne.Matrix<2x3xf64>
+    %b = "daphne.ewAdd"(%m2, %s2) : (!daphne.Matrix<2x3xf64>, f64) -> !daphne.Matrix<2x3xf64>
+    %r = "daphne.ewAdd"(%a, %b) : (!daphne.Matrix<2x3xf64>, !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<2x3xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xf64>) -> ()
+}
+
+// Negative case: all four element types must match. Here one scalar is si32 over
+// si64 matrices, which would promote the accumulation width, so the rewrite fails
+// closed and the ewAdds survive.
+// CHECK-LABEL: func.func @broadcast_min_promoting
+// CHECK-COUNT-3: daphne.ewAdd
+func.func @broadcast_min_promoting(%m1: !daphne.Matrix<2x3xsi64>, %s1: si32, %m2: !daphne.Matrix<2x3xsi64>, %s2: si32)
+        -> !daphne.Matrix<2x3xsi64> {
+    %a = "daphne.ewAdd"(%m1, %s1) : (!daphne.Matrix<2x3xsi64>, si32) -> !daphne.Matrix<2x3xsi64>
+    %b = "daphne.ewAdd"(%m2, %s2) : (!daphne.Matrix<2x3xsi64>, si32) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%a, %b) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// Negative case: the two matrices must have the same statically-known shape.
+// With shapes unknown the rewrite cannot prove the matrix add needs no
+// broadcasting, so it fails closed.
+// CHECK-LABEL: func.func @broadcast_min_unknown_shape
+// CHECK-COUNT-3: daphne.ewAdd
+func.func @broadcast_min_unknown_shape(%m1: !daphne.Matrix<?x?xsi64>, %s1: si64, %m2: !daphne.Matrix<?x?xsi64>, %s2: si64)
+        -> !daphne.Matrix<?x?xsi64> {
+    %a = "daphne.ewAdd"(%m1, %s1) : (!daphne.Matrix<?x?xsi64>, si64) -> !daphne.Matrix<?x?xsi64>
+    %b = "daphne.ewAdd"(%m2, %s2) : (!daphne.Matrix<?x?xsi64>, si64) -> !daphne.Matrix<?x?xsi64>
+    %r = "daphne.ewAdd"(%a, %b) : (!daphne.Matrix<?x?xsi64>, !daphne.Matrix<?x?xsi64>) -> !daphne.Matrix<?x?xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<?x?xsi64>) -> ()
+}
+
+// Negative case and termination witness: an inner add of two matrices is not a
+// matrix-plus-scalar broadcast, so it does not classify, which is exactly the
+// shape of this pattern's own output, confirming it cannot re-fire on its result.
+// CHECK-LABEL: func.func @broadcast_min_two_matrix_inner
+// CHECK-COUNT-3: daphne.ewAdd
+func.func @broadcast_min_two_matrix_inner(%m1: !daphne.Matrix<2x3xsi64>, %m2: !daphne.Matrix<2x3xsi64>,
+        %m3: !daphne.Matrix<2x3xsi64>, %s2: si64) -> !daphne.Matrix<2x3xsi64> {
+    %a = "daphne.ewAdd"(%m1, %m2) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    %b = "daphne.ewAdd"(%m3, %s2) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%a, %b) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}

@@ -564,6 +564,102 @@ struct AddTwoScaledPattern : public OpRewritePattern<daphne::EwAddOp> {
     }
 };
 
+/**
+ * @brief Regroups `(M1 + s1) + (M2 + s2)` to `(M1 + M2) + (s1 + s2)`.
+ *
+ * When two matrix-plus-scalar broadcasts are added, the scalars can be summed
+ * once up front instead of broadcast across every element twice. The rewrite
+ * pulls the two matrix operands into one matrix add and the two scalars into one
+ * scalar add, turning two element-wise scalar broadcasts into one.
+ *
+ * Integer-only. Over IEEE floating point addition is not associative: each `+`
+ * rounds, and regrouping four distinct addends changes which intermediate is
+ * rounded first, so the rewrite would not be value-preserving. Over integers it
+ * is exact in Z/2^n (the scalar sum may overflow, but the wrapped value is the
+ * correct ring element, so it is never a bail condition).
+ *
+ * All four element types are pinned to one integer type. `hasScaType` alone would
+ * admit float, string, index, and boolean scalars, so soundness rests on the
+ * explicit `IntegerType` check plus the element-type-equality guards, not on
+ * `hasScaType`. Pinning the operand types also stops EwAdd's CastArgsToResType
+ * from promoting the two new adds to a wider accumulation type.
+ *
+ * Terminating: the output is `ewAdd(M1 + M2, s1 + s2)` whose operands are a
+ * matrix-plus-matrix and a scalar-plus-scalar, neither of which classifies as a
+ * matrix-plus-scalar broadcast, so the pattern cannot match its own result.
+ */
+struct BroadcastMinimizePattern : public OpRewritePattern<daphne::EwAddOp> {
+    using OpRewritePattern<daphne::EwAddOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(daphne::EwAddOp op, PatternRewriter &rewriter) const override {
+        auto add1 = op.getLhs().getDefiningOp<daphne::EwAddOp>();
+        auto add2 = op.getRhs().getDefiningOp<daphne::EwAddOp>();
+        if (!add1 || !add2)
+            return failure();
+
+        // Split an inner add into its matrix and scalar operand, in either order.
+        // Fails when the add is not exactly one matrix and one scalar, which is
+        // also what keeps the rewrite from matching its own matrix+matrix output.
+        auto classify = [](daphne::EwAddOp a, Value &mat, Value &sca) -> bool {
+            Value l = a.getLhs(), r = a.getRhs();
+            if (getMatrixElementTypeOrNull(l) && CompilerUtils::hasScaType(r)) {
+                mat = l;
+                sca = r;
+                return true;
+            }
+            if (getMatrixElementTypeOrNull(r) && CompilerUtils::hasScaType(l)) {
+                mat = r;
+                sca = l;
+                return true;
+            }
+            return false;
+        };
+
+        Value m1, s1, m2, s2;
+        if (!classify(add1, m1, s1) || !classify(add2, m2, s2))
+            return failure();
+
+        // Tie all four element types to one integer type: the two matrices and
+        // the two scalars must share it, and it must be the outer result's element
+        // type. This makes the regrouping a pure reassociation with no width or
+        // sign change, and the integer check rules out non-associative floats and
+        // the non-numeric scalars hasScaType would otherwise admit.
+        Type elem = getMatrixElementTypeOrNull(m1);
+        if (!llvm::isa<IntegerType>(elem))
+            return failure();
+        if (getMatrixElementTypeOrNull(m2) != elem)
+            return failure();
+        if (s1.getType() != elem || s2.getType() != elem)
+            return failure();
+        auto outMat = llvm::dyn_cast<daphne::MatrixType>(op.getResult().getType());
+        if (!outMat || outMat.getElementType() != elem)
+            return failure();
+
+        // The two matrices must have the same statically-known shape so the matrix
+        // add needs no broadcasting; fail closed on any unknown or mismatched
+        // extent.
+        std::optional<ssize_t> rows1 = daphne::knownNumRows(m1);
+        std::optional<ssize_t> cols1 = daphne::knownNumCols(m1);
+        std::optional<ssize_t> rows2 = daphne::knownNumRows(m2);
+        std::optional<ssize_t> cols2 = daphne::knownNumCols(m2);
+        if (!rows1 || !cols1 || !rows2 || !cols2)
+            return failure();
+        if (*rows1 != *rows2 || *cols1 != *cols2)
+            return failure();
+
+        // s1 + s2 as a scalar add; M1 + M2 as a matrix add with sparsity and
+        // symmetry reset (the regrouped sum's are not M1's). The outer add reuses
+        // the original result type: it is again a matrix-plus-scalar broadcast, so
+        // it keeps whatever the original produced.
+        Value scalarSum = rewriter.create<daphne::EwAddOp>(op.getLoc(), elem, s1, s2);
+        auto m1Ty = llvm::cast<daphne::MatrixType>(m1.getType());
+        Type matAddTy = m1Ty.withSparsity(-1.0).withSymmetric(daphne::BoolOrUnknown::Unknown);
+        Value matrixSum = rewriter.create<daphne::EwAddOp>(op.getLoc(), matAddTy, m1, m2);
+        rewriter.replaceOpWithNewOp<daphne::EwAddOp>(op, op.getResult().getType(), matrixSum, scalarSum);
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::daphne {
@@ -575,6 +671,7 @@ void populateLinearAlgebraRewritePatterns(RewritePatternSet &patterns) {
                  RowAggDim1IdentityPattern<RowAggMaxOp>, ColAggDim1IdentityPattern<ColAggSumOp>,
                  ColAggDim1IdentityPattern<ColAggMinOp>, ColAggDim1IdentityPattern<ColAggMaxOp>>(ctx);
     patterns.add<SelfAddPattern, AddScaledLeafPattern, AddTwoScaledPattern>(ctx);
+    patterns.add<BroadcastMinimizePattern>(ctx);
 }
 
 } // namespace mlir::daphne
