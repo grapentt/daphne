@@ -334,9 +334,9 @@ func.func @add_scaled_leaf_float(%x: !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<
 // must survive.
 // CHECK-LABEL: func.func @self_add_string
 // CHECK: daphne.ewAdd
-func.func @self_add_string(%x: !daphne.Matrix<2x3xstr>) -> !daphne.Matrix<2x3xstr> {
-    %r = "daphne.ewAdd"(%x, %x) : (!daphne.Matrix<2x3xstr>, !daphne.Matrix<2x3xstr>) -> !daphne.Matrix<2x3xstr>
-    "daphne.return"(%r) : (!daphne.Matrix<2x3xstr>) -> ()
+func.func @self_add_string(%x: !daphne.Matrix<2x3x!daphne.String>) -> !daphne.Matrix<2x3x!daphne.String> {
+    %r = "daphne.ewAdd"(%x, %x) : (!daphne.Matrix<2x3x!daphne.String>, !daphne.Matrix<2x3x!daphne.String>) -> !daphne.Matrix<2x3x!daphne.String>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3x!daphne.String>) -> ()
 }
 
 // Negative case: distinct operands are not a self-addition, so X + Y survives.
