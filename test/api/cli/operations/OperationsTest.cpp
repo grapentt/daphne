@@ -216,3 +216,14 @@ TEST_CASE("rewrite_row_scale", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(di
 // (a dropped transpose would scale rows instead of columns, or the element-wise
 // kernel would take the wrong broadcast branch).
 TEST_CASE("rewrite_col_scale", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_col_scale", 1); }
+
+// Numerically proves the scalar-factor rewrite `sum(s * X) -> s * sum(X)`
+// end-to-end through the full compiler. The `.daphne` script scales the matrix
+// before aggregating so the rewrite fires; the `.ref.daphne` script scales the
+// aggregated scalar instead, a chain the rewrite cannot match. Their outputs
+// must agree byte for byte, which guards that hoisting the factor preserves the
+// result (a dropped factor or wrong aggregate would change the printed value). A
+// float matrix is used so the rewrite's element-type guard admits it.
+TEST_CASE("rewrite_sum_scalar_factor", TAG_OPERATIONS) {
+    compareDaphneToSelfRefSimple(dirPath, "rewrite_sum_scalar_factor", 1);
+}

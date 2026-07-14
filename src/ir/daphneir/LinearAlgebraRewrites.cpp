@@ -261,13 +261,68 @@ struct ColScalePattern : public OpRewritePattern<daphne::MatMulOp> {
     }
 };
 
+/**
+ * @brief Rewrites the scalar-factor idiom `sum(s * X)` to `s * sum(X)`.
+ *
+ * A scalar factor distributes over a total sum: `sum(s * X) = s * sum(X)`. This
+ * hoists the multiply out of the O(n * m) element-wise product into a single
+ * scalar multiply after the aggregate (and, since the element-wise product is
+ * Pure, lets DCE drop it when the sum was its only user).
+ *
+ * The rewrite fails closed. It matches only an element-wise product of exactly
+ * one scalar and one matrix operand (in either order, since EwMul is commutative
+ * and its canonicalizer may swap a scalar lhs to the rhs), and only when the matrix's
+ * element type equals the sum's result value type; see the per-guard comments.
+ */
+struct SumScalarFactorPattern : public OpRewritePattern<daphne::AllAggSumOp> {
+    using OpRewritePattern<daphne::AllAggSumOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(daphne::AllAggSumOp sumOp, PatternRewriter &rewriter) const override {
+        auto mulOp = sumOp.getArg().getDefiningOp<daphne::EwMulOp>();
+        if (!mulOp)
+            return failure();
+
+        // Require exactly one scalar and one matrix operand; accept either order
+        // (EwMul is commutative). Fail closed otherwise.
+        Value lhs = mulOp.getLhs();
+        Value rhs = mulOp.getRhs();
+        Value scalar;
+        Value matrix;
+        if (CompilerUtils::hasScaType(lhs) && getMatrixElementTypeOrNull(rhs)) {
+            scalar = lhs;
+            matrix = rhs;
+        } else if (CompilerUtils::hasScaType(rhs) && getMatrixElementTypeOrNull(lhs)) {
+            scalar = rhs;
+            matrix = lhs;
+        } else {
+            return failure();
+        }
+
+        // Soundness guard: the aggregate accumulates in its result value type, so
+        // sum(s * X) accumulates in the product's type while s * sum(X) accumulates
+        // in X's. If s promotes X (e.g. s:f64 over X:si64) those differ and the
+        // si64 accumulation can overflow, changing the result. Fire only when X's
+        // element type already equals the sum's result type, so it stays unchanged.
+        Type elemMatrix = getMatrixElementTypeOrNull(matrix);
+        if (elemMatrix != sumOp.getResult().getType())
+            return failure();
+
+        // Give sum(X) X's element type (which the guard proved equals the result
+        // type); an unknown type would never resolve, as inference has already run.
+        // The outer s * sum(X) is a scalar-by-scalar product reusing that type.
+        Value innerSum = rewriter.create<daphne::AllAggSumOp>(sumOp.getLoc(), elemMatrix, matrix);
+        rewriter.replaceOpWithNewOp<daphne::EwMulOp>(sumOp, sumOp.getResult().getType(), scalar, innerSum);
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::daphne {
 
 void populateLinearAlgebraRewritePatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
-    patterns.add<TraceIdiomPattern, RowScalePattern, ColScalePattern>(ctx);
+    patterns.add<TraceIdiomPattern, RowScalePattern, ColScalePattern, SumScalarFactorPattern>(ctx);
 }
 
 } // namespace mlir::daphne
