@@ -357,6 +357,33 @@ func.func @add_scaled_leaf_nonconst(%x: !daphne.Matrix<2x3xsi64>, %c: si64) -> !
     "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
 }
 
+// Negative case: the scaled term promotes the element width (an si32 leaf times
+// an si64 constant infers an si64 product and add). The coefficient fold rebuilds
+// from the narrow leaf type, which would truncate the coefficient and mistype the
+// result, so it must fail closed and the ewAdd survive.
+// CHECK-LABEL: func.func @add_scaled_leaf_promoting
+// CHECK: daphne.ewAdd
+func.func @add_scaled_leaf_promoting(%x: !daphne.Matrix<2x3xsi32>) -> !daphne.Matrix<2x3xsi64> {
+    %c4 = "daphne.constant"() {value = 4 : si64} : () -> si64
+    %m = "daphne.ewMul"(%x, %c4) : (!daphne.Matrix<2x3xsi32>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%m, %x) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi32>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// Negative case: the two-scaled fold has the same width-promotion guard. Two
+// si32-leaf products scaled by si64 constants infer an si64 add, so the fold must
+// fail closed rather than rebuild at the narrow width.
+// CHECK-LABEL: func.func @add_two_scaled_promoting
+// CHECK: daphne.ewAdd
+func.func @add_two_scaled_promoting(%x: !daphne.Matrix<2x3xsi32>) -> !daphne.Matrix<2x3xsi64> {
+    %c2 = "daphne.constant"() {value = 2 : si64} : () -> si64
+    %c5 = "daphne.constant"() {value = 5 : si64} : () -> si64
+    %m1 = "daphne.ewMul"(%x, %c2) : (!daphne.Matrix<2x3xsi32>, si64) -> !daphne.Matrix<2x3xsi64>
+    %m2 = "daphne.ewMul"(%x, %c5) : (!daphne.Matrix<2x3xsi32>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%m1, %m2) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
 // Broadcast minimization: (M1 + s1) + (M2 + s2) is regrouped to
 // (M1 + M2) + (s1 + s2), summing the scalars once instead of broadcasting twice.
 // The result is one matrix add feeding one matrix-plus-scalar broadcast; the two

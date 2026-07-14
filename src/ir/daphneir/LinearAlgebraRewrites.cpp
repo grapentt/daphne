@@ -502,6 +502,18 @@ struct AddScaledLeafPattern : public OpRewritePattern<daphne::EwAddOp> {
         if (!isRewritableIntElem(elem))
             return failure();
 
+        // The scaled term may have promoted the result to a wider type (e.g. an
+        // si32 leaf times an si64 constant yields an si64 add). emitScaledMatrix
+        // rebuilds from the narrow leaf type and truncates the coefficient to it,
+        // so firing here would substitute a wrongly-typed, wrongly-wrapped value.
+        // Fire only when the accumulation width is unchanged, as SumScalarFactor
+        // does for the same promotion hazard.
+        Type resElem = getMatrixElementTypeOrNull(op.getResult());
+        if (!resElem)
+            resElem = op.getResult().getType();
+        if (resElem != elem)
+            return failure();
+
         // Coefficient sum in Z/2^n: compute unsigned so overflow wraps defined,
         // matching the integer kernels' modular add.
         rewriter.replaceOp(op, emitScaledMatrix(rewriter, op.getLoc(), plain, static_cast<uint64_t>(factor) + 1));
@@ -554,6 +566,16 @@ struct AddTwoScaledPattern : public OpRewritePattern<daphne::EwAddOp> {
         if (!elem)
             elem = leaf1.getType();
         if (!isRewritableIntElem(elem))
+            return failure();
+
+        // Reject the promoting case for the same reason as AddScaledLeafPattern:
+        // a wider result (e.g. an si32 leaf scaled by si64 constants) would be
+        // rebuilt at the narrow leaf width, truncating the coefficient and
+        // mistyping the replacement. Fire only when the width is unchanged.
+        Type resElem = getMatrixElementTypeOrNull(op.getResult());
+        if (!resElem)
+            resElem = op.getResult().getType();
+        if (resElem != elem)
             return failure();
 
         // Coefficient sum in Z/2^n: unsigned add wraps defined, matching the
