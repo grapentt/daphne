@@ -202,3 +202,65 @@ func.func @sum_scalar_factor_promoting(%s: f64, %x: !daphne.Matrix<3x4xsi64>) ->
     %r = "daphne.sumAll"(%m) : (!daphne.Matrix<3x4xf64>) -> f64
     "daphne.return"(%r) : (f64) -> ()
 }
+
+// Row-aggregate identity: a row-wise sum of an n x 1 matrix touches one element
+// per row, so sumRow(X) = X and the aggregate is dropped.
+// CHECK-LABEL: func.func @row_agg_dim1
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x1xf64>)
+// CHECK-NEXT: "daphne.return"(%[[ARG]])
+// CHECK-NOT: daphne.sumRow
+func.func @row_agg_dim1(%x: !daphne.Matrix<3x1xf64>) -> !daphne.Matrix<3x1xf64> {
+    %r = "daphne.sumRow"(%x) : (!daphne.Matrix<3x1xf64>) -> !daphne.Matrix<3x1xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<3x1xf64>) -> ()
+}
+
+// Column-aggregate identity: a column-wise sum of a 1 x m matrix is the
+// identity, sumCol(X) = X.
+// CHECK-LABEL: func.func @col_agg_dim1
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<1x4xf64>)
+// CHECK-NEXT: "daphne.return"(%[[ARG]])
+// CHECK-NOT: daphne.sumCol
+func.func @col_agg_dim1(%x: !daphne.Matrix<1x4xf64>) -> !daphne.Matrix<1x4xf64> {
+    %r = "daphne.sumCol"(%x) : (!daphne.Matrix<1x4xf64>) -> !daphne.Matrix<1x4xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<1x4xf64>) -> ()
+}
+
+// Min/max adopt the same identity over a singleton reduced dimension. Exercised
+// on an integer minRow so a broken instantiation of the min/max variant is
+// caught independently of the sum variant.
+// CHECK-LABEL: func.func @row_agg_dim1_min
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<2x1xsi64>)
+// CHECK-NEXT: "daphne.return"(%[[ARG]])
+// CHECK-NOT: daphne.minRow
+func.func @row_agg_dim1_min(%x: !daphne.Matrix<2x1xsi64>) -> !daphne.Matrix<2x1xsi64> {
+    %r = "daphne.minRow"(%x) : (!daphne.Matrix<2x1xsi64>) -> !daphne.Matrix<2x1xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x1xsi64>) -> ()
+}
+
+// Negative case: a row-wise sum of a multi-column matrix genuinely reduces, so
+// the aggregate must survive.
+// CHECK-LABEL: func.func @row_agg_multicol
+// CHECK: daphne.sumRow
+func.func @row_agg_multicol(%x: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x1xf64> {
+    %r = "daphne.sumRow"(%x) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x1xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<3x1xf64>) -> ()
+}
+
+// Negative case: with the column count unknown the rewrite fails closed (it
+// cannot prove the reduced dimension is 1), so the aggregate survives.
+// CHECK-LABEL: func.func @row_agg_unknown
+// CHECK: daphne.sumRow
+func.func @row_agg_unknown(%x: !daphne.Matrix<?x?xf64>) -> !daphne.Matrix<?x1xf64> {
+    %r = "daphne.sumRow"(%x) : (!daphne.Matrix<?x?xf64>) -> !daphne.Matrix<?x1xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<?x1xf64>) -> ()
+}
+
+// Negative case: meanRow promotes to a floating-point result and a singleton
+// mean is not the element in general, so the FP-promoting variants are not
+// instantiated and the aggregate survives even over an n x 1 matrix.
+// CHECK-LABEL: func.func @row_agg_mean_promote
+// CHECK: daphne.meanRow
+func.func @row_agg_mean_promote(%x: !daphne.Matrix<3x1xsi64>) -> !daphne.Matrix<3x1xf64> {
+    %r = "daphne.meanRow"(%x) : (!daphne.Matrix<3x1xsi64>) -> !daphne.Matrix<3x1xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<3x1xf64>) -> ()
+}

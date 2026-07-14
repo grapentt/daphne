@@ -227,3 +227,10 @@ TEST_CASE("rewrite_col_scale", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(di
 TEST_CASE("rewrite_sum_scalar_factor", TAG_OPERATIONS) {
     compareDaphneToSelfRefSimple(dirPath, "rewrite_sum_scalar_factor", 1);
 }
+
+// Numerically proves the row-aggregate identity `sum(X, 0) -> X` for an n x 1
+// matrix end-to-end through the full compiler. The `.daphne` script aggregates a
+// single-column matrix so the rewrite fires; the `.ref.daphne` script prints the
+// matrix directly, giving no aggregate to match. Their outputs must agree byte
+// for byte, which guards that dropping the aggregate preserves the values.
+TEST_CASE("rewrite_row_agg_dim1", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_row_agg_dim1", 1); }

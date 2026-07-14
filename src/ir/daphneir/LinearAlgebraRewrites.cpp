@@ -316,6 +316,76 @@ struct SumScalarFactorPattern : public OpRewritePattern<daphne::AllAggSumOp> {
     }
 };
 
+/**
+ * @brief Rewrites a row-wise aggregate of a single-column matrix to its input.
+ *
+ * A row-wise aggregate reduces each row to one value, so over an n x 1 matrix it
+ * touches exactly one element per row: `sumRow(X) = X`, and likewise for min/max.
+ * The rewrite drops the aggregate entirely (and, since these aggregates are Pure,
+ * DCE removes it when it was the operand's only user).
+ *
+ * Only sum/min/max are instantiated: over a singleton each simply returns that
+ * element, so the value is unchanged and there is no accumulation to overflow.
+ * mean/var/stddev are excluded, since they promote to a floating-point result type
+ * (and a singleton variance is 0, not the element), as are idxMin/idxMax,
+ * whose result is a position, not the value.
+ *
+ * The rewrite fails closed: it fires only when the column count is statically
+ * known to be 1 and the aggregate preserves the element type (which sum/min/max
+ * do via ValueTypeFromFirstArg). It deliberately does not require the full matrix
+ * type to match, only the element type: the aggregate result carries no sparsity
+ * (it has no SparsityFromArg trait), so replacing it with the input yields an
+ * equal-or-more-precise type its users already accept.
+ */
+template <class AggOp> struct RowAggDim1IdentityPattern : public OpRewritePattern<AggOp> {
+    using OpRewritePattern<AggOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(AggOp op, PatternRewriter &rewriter) const override {
+        Value arg = op.getArg();
+
+        std::optional<ssize_t> cols = daphne::knownNumCols(arg);
+        if (!cols || *cols != 1)
+            return failure();
+
+        Type elemArg = getMatrixElementTypeOrNull(arg);
+        Type elemRes = getMatrixElementTypeOrNull(op.getResult());
+        if (!elemArg || elemArg != elemRes)
+            return failure();
+
+        rewriter.replaceOp(op, arg);
+        return success();
+    }
+};
+
+/**
+ * @brief Rewrites a column-wise aggregate of a single-row matrix to its input.
+ *
+ * The column-wise counterpart of `RowAggDim1IdentityPattern`: a column-wise
+ * aggregate reduces each column to one value, so over a 1 x m matrix it is the
+ * identity, `sumCol(X) = X` (and min/max). Guards on a statically-known row count
+ * of 1; see `RowAggDim1IdentityPattern` for the sum/min/max-only rationale and
+ * the element-type-only match.
+ */
+template <class AggOp> struct ColAggDim1IdentityPattern : public OpRewritePattern<AggOp> {
+    using OpRewritePattern<AggOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(AggOp op, PatternRewriter &rewriter) const override {
+        Value arg = op.getArg();
+
+        std::optional<ssize_t> rows = daphne::knownNumRows(arg);
+        if (!rows || *rows != 1)
+            return failure();
+
+        Type elemArg = getMatrixElementTypeOrNull(arg);
+        Type elemRes = getMatrixElementTypeOrNull(op.getResult());
+        if (!elemArg || elemArg != elemRes)
+            return failure();
+
+        rewriter.replaceOp(op, arg);
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::daphne {
@@ -323,6 +393,9 @@ namespace mlir::daphne {
 void populateLinearAlgebraRewritePatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
     patterns.add<TraceIdiomPattern, RowScalePattern, ColScalePattern, SumScalarFactorPattern>(ctx);
+    patterns.add<RowAggDim1IdentityPattern<RowAggSumOp>, RowAggDim1IdentityPattern<RowAggMinOp>,
+                 RowAggDim1IdentityPattern<RowAggMaxOp>, ColAggDim1IdentityPattern<ColAggSumOp>,
+                 ColAggDim1IdentityPattern<ColAggMinOp>, ColAggDim1IdentityPattern<ColAggMaxOp>>(ctx);
 }
 
 } // namespace mlir::daphne
