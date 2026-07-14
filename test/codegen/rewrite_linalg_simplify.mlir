@@ -203,6 +203,19 @@ func.func @sum_scalar_factor_promoting(%s: f64, %x: !daphne.Matrix<3x4xsi64>) ->
     "daphne.return"(%r) : (f64) -> ()
 }
 
+// Same rewrite with the scalar on the ewMul rhs (X * s), the form EwMul's
+// canonicalizer produces, so the shape the pass most often sees. The match has a
+// second arm for this operand order; the emitted ewMul(s, sum(X)) is identical to
+// the scalar-lhs case, so only the input order distinguishes the two.
+// CHECK-LABEL: func.func @sum_scalar_factor_scalar_rhs
+// CHECK: %[[S:.*]] = "daphne.sumAll"(%{{.*}}) : (!daphne.Matrix<3x4xf64>) -> f64
+// CHECK: "daphne.ewMul"(%{{.*}}, %[[S]]) : (f64, f64) -> f64
+func.func @sum_scalar_factor_scalar_rhs(%s: f64, %x: !daphne.Matrix<3x4xf64>) -> f64 {
+    %m = "daphne.ewMul"(%x, %s) : (!daphne.Matrix<3x4xf64>, f64) -> !daphne.Matrix<3x4xf64>
+    %r = "daphne.sumAll"(%m) : (!daphne.Matrix<3x4xf64>) -> f64
+    "daphne.return"(%r) : (f64) -> ()
+}
+
 // Row-aggregate identity: a row-wise sum of an n x 1 matrix touches one element
 // per row, so sumRow(X) = X and the aggregate is dropped.
 // CHECK-LABEL: func.func @row_agg_dim1
@@ -303,6 +316,22 @@ func.func @add_two_scaled_int(%x: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x
     "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
 }
 
+// EwMul is commutative, so the scaling constant may sit on either side of the
+// inner product. Here the first product is written constant-first (2 * X) and
+// the second matrix-first (X * 5); both are extracted and merged to X * 7.
+// CHECK-LABEL: func.func @add_two_scaled_const_lhs
+// CHECK-NOT: daphne.ewAdd
+// CHECK: %[[C:.*]] = "daphne.constant"() <{value = 7 : si64}>
+// CHECK: "daphne.ewMul"(%{{.*}}, %[[C]])
+func.func @add_two_scaled_const_lhs(%x: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64> {
+    %c2 = "daphne.constant"() {value = 2 : si64} : () -> si64
+    %c5 = "daphne.constant"() {value = 5 : si64} : () -> si64
+    %m1 = "daphne.ewMul"(%c2, %x) : (si64, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    %m2 = "daphne.ewMul"(%x, %c5) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%m1, %m2) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
 // EwAdd is not commutative in DAPHNE, so the scaled-leaf fold must match the
 // scaled term on either side. Here the bare copy is the lhs: X + (X * 4) folds
 // to X * 5.
@@ -382,6 +411,21 @@ func.func @add_two_scaled_promoting(%x: !daphne.Matrix<2x3xsi32>) -> !daphne.Mat
     %m2 = "daphne.ewMul"(%x, %c5) : (!daphne.Matrix<2x3xsi32>, si64) -> !daphne.Matrix<2x3xsi64>
     %r = "daphne.ewAdd"(%m1, %m2) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
     "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// The emitted ewMul must reset the leaf's sparsity: the scaled product's density
+// is not the leaf's, and inference does not re-run after this pass, so a leaked
+// value would persist into representation selection. The result type must be a
+// plain 2x3xf64 with no sp[...] annotation.
+// CHECK-LABEL: func.func @self_add_resets_sparsity
+// CHECK: %[[M:.*]] = "daphne.ewMul"
+// CHECK-SAME: -> !daphne.Matrix<2x3xf64>
+func.func @self_add_resets_sparsity(%x: !daphne.Matrix<2x3xf64:sp[3.000000e-01]>)
+        -> !daphne.Matrix<2x3xf64:sp[3.000000e-01]> {
+    %r = "daphne.ewAdd"(%x, %x)
+        : (!daphne.Matrix<2x3xf64:sp[3.000000e-01]>, !daphne.Matrix<2x3xf64:sp[3.000000e-01]>)
+        -> !daphne.Matrix<2x3xf64:sp[3.000000e-01]>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xf64:sp[3.000000e-01]>) -> ()
 }
 
 // Broadcast minimization: (M1 + s1) + (M2 + s2) is regrouped to
