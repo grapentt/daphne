@@ -33,6 +33,14 @@ def IdentityOnIntegerElementType : NativeOpTrait<"IdentityOnIntegerElementType">
 // f(X) = X when X's inferred symmetric property is true.
 def IdentityWhenSymmetric : NativeOpTrait<"IdentityWhenSymmetric">;
 
+// f(X) permutes X's elements without changing their multiset (e.g. transpose,
+// reverse). Marks the producer half of the agg(reorder(X)) = agg(X) rewrite.
+def OnlyReordersElements : NativeOpTrait<"OnlyReordersElements">;
+
+// f(X) computes an order-independent reduction over all of X's elements, so it
+// is invariant under any OnlyReordersElements producer feeding it.
+def OrderAgnosticAggregate : NativeOpTrait<"OrderAgnosticAggregate">;
+
 // ****************************************************************************
 // Parametric algebraic traits (enumerated)
 // ****************************************************************************

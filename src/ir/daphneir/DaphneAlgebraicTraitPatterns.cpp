@@ -86,8 +86,45 @@ struct InvolutivePattern : public RewritePattern {
 };
 
 /**
- * @brief Replaces `f(X)` with `X` when X's element type is an integer.
+ * @brief Collapses `agg(reorder(X))` to `agg(X)`.
+ *
+ * An order-agnostic reduction over every element (outer op tagged
+ * `OrderAgnosticAggregate`) is invariant under any producer that only permutes
+ * elements without changing their multiset (inner op tagged
+ * `OnlyReordersElements`, e.g. transpose or reverse), so the reorder is dead and
+ * can be dropped. Both `Pure`, so DCE removes the now-unused inner op.
+ *
+ * The rewrite is currently specialised to `AllAggSumOp`: it rebuilds a sumAll,
+ * so it must refuse to fire on any other op that later adopts
+ * `OrderAgnosticAggregate` (rewriting it into a sum would miscompute). The
+ * inner operand must be a matrix -- the only thing an aggregate reduces --
+ * matching the fail-closed style of the other trait patterns.
  */
+struct ReorderAgnosticAggPattern : public RewritePattern {
+    ReorderAgnosticAggPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::OrderAgnosticAggregate>())
+            return failure();
+        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+            return failure();
+        if (!llvm::isa<daphne::AllAggSumOp>(op))
+            return failure();
+
+        Operation *inner = op->getOperand(0).getDefiningOp();
+        if (!inner || !inner->hasTrait<OpTrait::OnlyReordersElements>())
+            return failure();
+        if (inner->getNumOperands() != 1 || inner->getNumResults() != 1)
+            return failure();
+        if (!getMatrixElementTypeOrNull(inner->getOperand(0)))
+            return failure();
+
+        // The aggregate's scalar result type is unchanged: sumAll's value type
+        // comes from its argument's element type, which the reorder preserves.
+        rewriter.replaceOpWithNewOp<daphne::AllAggSumOp>(op, op->getResult(0).getType(), inner->getOperand(0));
+        return success();
+    }
+};
 struct IdentityOnIntegerElementTypePattern : public RewritePattern {
     IdentityOnIntegerElementTypePattern(MLIRContext *ctx)
         : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
@@ -253,8 +290,8 @@ namespace mlir::daphne {
 void populateAlgebraicTraitPatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
     patterns.add<InvolutivePattern, IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern,
-                 NeutralOnZeroRHSPattern, NeutralOnOneRHSPattern, LeftAbsorbingOnZeroPattern,
-                 RightAbsorbingOnZeroPattern>(ctx);
+                 ReorderAgnosticAggPattern, NeutralOnZeroRHSPattern, NeutralOnOneRHSPattern,
+                 LeftAbsorbingOnZeroPattern, RightAbsorbingOnZeroPattern>(ctx);
 }
 
 } // namespace mlir::daphne

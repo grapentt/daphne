@@ -32,6 +32,10 @@ class IdentityOnIntegerElementType : public TraitBase<ConcreteOp, IdentityOnInte
 
 template <class ConcreteOp> class IdentityWhenSymmetric : public TraitBase<ConcreteOp, IdentityWhenSymmetric> {};
 
+template <class ConcreteOp> class OnlyReordersElements : public TraitBase<ConcreteOp, OnlyReordersElements> {};
+
+template <class ConcreteOp> class OrderAgnosticAggregate : public TraitBase<ConcreteOp, OrderAgnosticAggregate> {};
+
 template <class ConcreteOp> class NeutralOnZeroRHS : public TraitBase<ConcreteOp, NeutralOnZeroRHS> {};
 
 template <class ConcreteOp> class NeutralOnOneRHS : public TraitBase<ConcreteOp, NeutralOnOneRHS> {};

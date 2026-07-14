@@ -518,7 +518,7 @@ class Daphne_AllAggOp<string name, Type scalarType, list<Trait> traits = []>
     let results = (outs scalarType:$res);
 }
 
-def Daphne_AllAggSumOp    : Daphne_AllAggOp<"sumAll", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
+def Daphne_AllAggSumOp    : Daphne_AllAggOp<"sumAll", NumScalar, [ValueTypeFromFirstArg, OrderAgnosticAggregate, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
 def Daphne_AllAggMinOp    : Daphne_AllAggOp<"minAll", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
 def Daphne_AllAggMaxOp    : Daphne_AllAggOp<"maxAll", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
 def Daphne_AllAggMeanOp   : Daphne_AllAggOp<"meanAll", NumScalar, [ValueTypeFromArgsFP]>;
@@ -768,7 +768,7 @@ def Daphne_ReshapeOp : Daphne_Op<"reshape", [
 }
 
 def Daphne_TransposeOp : Daphne_Op<"transpose", [
-    TypeFromFirstArg, Involutive,
+    TypeFromFirstArg, Involutive, OnlyReordersElements,
     DeclareOpInterfaceMethods<VectorizableOpInterface>,
     NumRowsFromArgNumCols, NumColsFromArgNumRows, SparsityFromArg, CUDASupport,
     DeclareOpInterfaceMethods<InferSymmetricOpInterface>,
@@ -807,7 +807,7 @@ def Daphne_RowBindOp : Daphne_BindOp<"rowBind", [
 ]>;
 
 def Daphne_ReverseOp : Daphne_Op<"reverse", [
-    TypeFromFirstArg, ShapeFromArg, Involutive, Pure
+    TypeFromFirstArg, ShapeFromArg, Involutive, OnlyReordersElements, Pure
 ]> {
     let arguments = (ins MatrixOrU:$arg);
     let results = (outs MatrixOrU:$res);

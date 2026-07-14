@@ -227,3 +227,53 @@ func.func @reverse_single(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4x
     %0 = "daphne.reverse"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
     "daphne.return"(%0) : (!daphne.Matrix<3x4xf64>) -> ()
 }
+
+// OrderAgnosticAggregate over OnlyReordersElements: sum(t(X)) folds to sum(X),
+// dropping the transpose the total sum never needed. Uses a dynamic shape to
+// show the fold does not depend on statically-known extents.
+// CHECK-LABEL: func.func @agg_reorder_transpose
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<?x?xf64>)
+// CHECK: "daphne.sumAll"(%[[ARG]])
+// CHECK-NOT: daphne.transpose
+func.func @agg_reorder_transpose(%arg0: !daphne.Matrix<?x?xf64>) -> f64 {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<?x?xf64>) -> !daphne.Matrix<?x?xf64>
+    %1 = "daphne.sumAll"(%0) : (!daphne.Matrix<?x?xf64>) -> f64
+    "daphne.return"(%1) : (f64) -> ()
+}
+
+// Second OnlyReordersElements producer: sum(reverse(X)) folds to sum(X) too,
+// catching a broken trait attachment on ReverseOp independently of transpose.
+// CHECK-LABEL: func.func @agg_reorder_reverse
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>)
+// CHECK: "daphne.sumAll"(%[[ARG]])
+// CHECK-NOT: daphne.reverse
+func.func @agg_reorder_reverse(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {
+    %0 = "daphne.reverse"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    %1 = "daphne.sumAll"(%0) : (!daphne.Matrix<3x4xf64>) -> f64
+    "daphne.return"(%1) : (f64) -> ()
+}
+
+// A chain of reorders peels off entirely: sum(t(reverse(X))) folds to sum(X)
+// as the greedy driver re-examines each new sumAll.
+// CHECK-LABEL: func.func @agg_reorder_chain
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>)
+// CHECK: "daphne.sumAll"(%[[ARG]])
+// CHECK-NOT: daphne.transpose
+// CHECK-NOT: daphne.reverse
+func.func @agg_reorder_chain(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {
+    %0 = "daphne.reverse"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    %1 = "daphne.transpose"(%0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x3xf64>
+    %2 = "daphne.sumAll"(%1) : (!daphne.Matrix<4x3xf64>) -> f64
+    "daphne.return"(%2) : (f64) -> ()
+}
+
+// Negative case: minAll is not tagged OrderAgnosticAggregate, so the reorder
+// must survive. min over a reordered matrix is equal in value, but the rewrite
+// stays fail-closed to the one aggregate whose result op it can rebuild.
+// CHECK-LABEL: func.func @agg_reorder_min_not_agnostic
+// CHECK: daphne.transpose
+func.func @agg_reorder_min_not_agnostic(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x3xf64>
+    %1 = "daphne.minAll"(%0) : (!daphne.Matrix<4x3xf64>) -> f64
+    "daphne.return"(%1) : (f64) -> ()
+}
