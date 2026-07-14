@@ -386,6 +386,184 @@ template <class AggOp> struct ColAggDim1IdentityPattern : public OpRewritePatter
     }
 };
 
+// Emits `leaf * coeff` as an element-wise product with a scalar coefficient
+// constant of `leaf`'s element type. Pinning the coefficient to the element type
+// stops EwMul's CastArgsToResType from promoting the result to a wider type,
+// which would change the accumulation width. `leaf` is the matrix (or scalar) to
+// scale; the coefficient is placed on the rhs, the order the broadcast kernel and
+// EwMul's canonicalizer both leave untouched for a non-scalar lhs. When `leaf` is
+// a matrix the result reuses its type with sparsity and symmetry reset, since the
+// scaled product's density and symmetry are not the leaf's. For an integer
+// element type `coeff` is the bit pattern, which getIntegerAttr truncates to the
+// element width, matching the modular arithmetic the integer kernels use at run
+// time; for a floating-point element type it is the exact small coefficient.
+static Value emitScaledMatrix(PatternRewriter &rewriter, Location loc, Value leaf, uint64_t coeff) {
+    Type elemTy = getMatrixElementTypeOrNull(leaf);
+    if (!elemTy)
+        elemTy = leaf.getType();
+
+    TypedAttr coeffAttr;
+    if (auto floatTy = llvm::dyn_cast<FloatType>(elemTy))
+        coeffAttr = rewriter.getFloatAttr(floatTy, static_cast<double>(coeff));
+    else
+        coeffAttr = rewriter.getIntegerAttr(elemTy, static_cast<int64_t>(coeff));
+    Value coeffVal = rewriter.create<daphne::ConstantOp>(loc, elemTy, coeffAttr);
+
+    Type resTy = leaf.getType();
+    if (auto mt = llvm::dyn_cast<daphne::MatrixType>(resTy))
+        resTy = mt.withSparsity(-1.0).withSymmetric(daphne::BoolOrUnknown::Unknown);
+    return rewriter.create<daphne::EwMulOp>(loc, resTy, leaf, coeffVal);
+}
+
+// Returns true when `elem` admits the repeated-add-to-multiply rewrites: an
+// integer element type wider than one bit. EwAdd accepts strings and booleans,
+// but EwMul does not (string concatenation, and a bit cannot hold coefficient 2),
+// so the emitted ewMul would be ill-typed for those; fail closed.
+static bool isRewritableIntElem(Type elem) {
+    auto intTy = llvm::dyn_cast<IntegerType>(elem);
+    return intTy && intTy.getWidth() > 1;
+}
+
+/**
+ * @brief Rewrites `a + a` to `a * 2`.
+ *
+ * A self-addition is an exact doubling: over integers it is `2 * a` in the ring
+ * Z/2^n (modular add, so any overflow is preserved identically), and over IEEE
+ * floating point it is a pure exponent increment: bit-exact, with NaN, Inf and
+ * -0.0 all carried through unchanged. Both element types are therefore admitted;
+ * this is the only one of the repeated-add rewrites that fires for floats, since
+ * it doubles a single value rather than regrouping distinct addends.
+ *
+ * String and boolean (i1) element types are excluded: EwMul rejects strings, and
+ * a one-bit integer cannot represent the coefficient 2.
+ */
+struct SelfAddPattern : public OpRewritePattern<daphne::EwAddOp> {
+    using OpRewritePattern<daphne::EwAddOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(daphne::EwAddOp op, PatternRewriter &rewriter) const override {
+        if (op.getLhs() != op.getRhs())
+            return failure();
+
+        Type elem = getMatrixElementTypeOrNull(op.getLhs());
+        if (!elem)
+            elem = op.getLhs().getType();
+        if (!llvm::isa<FloatType>(elem) && !isRewritableIntElem(elem))
+            return failure();
+
+        rewriter.replaceOp(op, emitScaledMatrix(rewriter, op.getLoc(), op.getLhs(), 2));
+        return success();
+    }
+};
+
+/**
+ * @brief Rewrites `(x * c) + x` (and the commuted `x + (x * c)`) to `x * (c+1)`.
+ *
+ * Folds a scaled term and a bare copy of the same value into one scaled term.
+ * Restricted to integer element types: over floats `(c*x) + x` and `(c+1)*x`
+ * round differently, so the rewrite would not be bit-exact. Over integers it is
+ * exact in Z/2^n, so the coefficient sum `c + 1` is computed modulo the element
+ * width and never bails on overflow: the wrapped value is the correct result.
+ *
+ * EwAdd is not commutative in DAPHNE, so both operand orders are matched
+ * explicitly. The scaled operand must be an ewMul of the same value `x` by a
+ * constant.
+ */
+struct AddScaledLeafPattern : public OpRewritePattern<daphne::EwAddOp> {
+    using OpRewritePattern<daphne::EwAddOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(daphne::EwAddOp op, PatternRewriter &rewriter) const override {
+        // Try both orders: the scaled term may be the lhs or the rhs.
+        Value scaled = op.getLhs();
+        Value plain = op.getRhs();
+        auto mulOp = scaled.getDefiningOp<daphne::EwMulOp>();
+        if (!mulOp) {
+            scaled = op.getRhs();
+            plain = op.getLhs();
+            mulOp = scaled.getDefiningOp<daphne::EwMulOp>();
+        }
+        if (!mulOp)
+            return failure();
+
+        // The ewMul must scale `plain` (the bare copy) by a constant factor.
+        auto [isConst, factor] = CompilerUtils::isConstant<int64_t>(mulOp.getRhs());
+        Value leaf = mulOp.getLhs();
+        if (!isConst) {
+            auto [isConstLhs, factorLhs] = CompilerUtils::isConstant<int64_t>(mulOp.getLhs());
+            isConst = isConstLhs;
+            factor = factorLhs;
+            leaf = mulOp.getRhs();
+        }
+        if (!isConst || leaf != plain)
+            return failure();
+
+        Type elem = getMatrixElementTypeOrNull(plain);
+        if (!elem)
+            elem = plain.getType();
+        if (!isRewritableIntElem(elem))
+            return failure();
+
+        // Coefficient sum in Z/2^n: compute unsigned so overflow wraps defined,
+        // matching the integer kernels' modular add.
+        rewriter.replaceOp(op, emitScaledMatrix(rewriter, op.getLoc(), plain, static_cast<uint64_t>(factor) + 1));
+        return success();
+    }
+};
+
+/**
+ * @brief Rewrites `(x * c1) + (x * c2)` to `x * (c1+c2)`.
+ *
+ * Merges two scaled copies of the same value into one. Integer-only for the same
+ * reason as `AddScaledLeafPattern`, and the coefficient sum is likewise modular
+ * (never bails on overflow).
+ */
+struct AddTwoScaledPattern : public OpRewritePattern<daphne::EwAddOp> {
+    using OpRewritePattern<daphne::EwAddOp>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(daphne::EwAddOp op, PatternRewriter &rewriter) const override {
+        auto mul1 = op.getLhs().getDefiningOp<daphne::EwMulOp>();
+        auto mul2 = op.getRhs().getDefiningOp<daphne::EwMulOp>();
+        if (!mul1 || !mul2)
+            return failure();
+
+        // Each ewMul must scale a common leaf `x` by a constant factor. The
+        // constant may sit on either side of each product.
+        auto extract = [](daphne::EwMulOp mul, int64_t &factor, Value &leaf) -> bool {
+            auto [isConstR, factorR] = CompilerUtils::isConstant<int64_t>(mul.getRhs());
+            if (isConstR) {
+                factor = factorR;
+                leaf = mul.getLhs();
+                return true;
+            }
+            auto [isConstL, factorL] = CompilerUtils::isConstant<int64_t>(mul.getLhs());
+            if (isConstL) {
+                factor = factorL;
+                leaf = mul.getRhs();
+                return true;
+            }
+            return false;
+        };
+
+        int64_t c1, c2;
+        Value leaf1, leaf2;
+        if (!extract(mul1, c1, leaf1) || !extract(mul2, c2, leaf2))
+            return failure();
+        if (leaf1 != leaf2)
+            return failure();
+
+        Type elem = getMatrixElementTypeOrNull(leaf1);
+        if (!elem)
+            elem = leaf1.getType();
+        if (!isRewritableIntElem(elem))
+            return failure();
+
+        // Coefficient sum in Z/2^n: unsigned add wraps defined, matching the
+        // integer kernels' modular arithmetic.
+        rewriter.replaceOp(op, emitScaledMatrix(rewriter, op.getLoc(), leaf1,
+                                                static_cast<uint64_t>(c1) + static_cast<uint64_t>(c2)));
+        return success();
+    }
+};
+
 } // namespace
 
 namespace mlir::daphne {
@@ -396,6 +574,7 @@ void populateLinearAlgebraRewritePatterns(RewritePatternSet &patterns) {
     patterns.add<RowAggDim1IdentityPattern<RowAggSumOp>, RowAggDim1IdentityPattern<RowAggMinOp>,
                  RowAggDim1IdentityPattern<RowAggMaxOp>, ColAggDim1IdentityPattern<ColAggSumOp>,
                  ColAggDim1IdentityPattern<ColAggMinOp>, ColAggDim1IdentityPattern<ColAggMaxOp>>(ctx);
+    patterns.add<SelfAddPattern, AddScaledLeafPattern, AddTwoScaledPattern>(ctx);
 }
 
 } // namespace mlir::daphne

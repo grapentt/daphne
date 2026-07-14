@@ -264,3 +264,95 @@ func.func @row_agg_mean_promote(%x: !daphne.Matrix<3x1xsi64>) -> !daphne.Matrix<
     %r = "daphne.meanRow"(%x) : (!daphne.Matrix<3x1xsi64>) -> !daphne.Matrix<3x1xf64>
     "daphne.return"(%r) : (!daphne.Matrix<3x1xf64>) -> ()
 }
+
+// Repeated-add self-doubling: X + X is rewritten to X * 2. Fires for floats too:
+// doubling a single value is an exact exponent increment, unlike regrouping
+// distinct addends, so this exercises the float case.
+// CHECK-LABEL: func.func @repeated_add_self_float
+// CHECK-NOT: daphne.ewAdd
+// CHECK: daphne.ewMul
+func.func @repeated_add_self_float(%x: !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<2x3xf64> {
+    %r = "daphne.ewAdd"(%x, %x) : (!daphne.Matrix<2x3xf64>, !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<2x3xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xf64>) -> ()
+}
+
+// A chain X + X + X collapses to X * 3: the greedy driver rewrites the inner
+// X + X to X * 2, re-examines the result, then folds (X * 2) + X to X * 3. The
+// two ewAdds are gone, leaving one ewMul by the coefficient 3.
+// CHECK-LABEL: func.func @repeated_add_chain_int
+// CHECK-NOT: daphne.ewAdd
+// CHECK: %[[C:.*]] = "daphne.constant"() <{value = 3 : si64}>
+// CHECK: "daphne.ewMul"(%{{.*}}, %[[C]])
+func.func @repeated_add_chain_int(%x: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64> {
+    %a = "daphne.ewAdd"(%x, %x) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    %b = "daphne.ewAdd"(%a, %x) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%b) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// Two scaled copies merge: (X * 2) + (X * 5) is rewritten to X * 7.
+// CHECK-LABEL: func.func @add_two_scaled_int
+// CHECK-NOT: daphne.ewAdd
+// CHECK: %[[C:.*]] = "daphne.constant"() <{value = 7 : si64}>
+// CHECK: "daphne.ewMul"(%{{.*}}, %[[C]])
+func.func @add_two_scaled_int(%x: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64> {
+    %c2 = "daphne.constant"() {value = 2 : si64} : () -> si64
+    %c5 = "daphne.constant"() {value = 5 : si64} : () -> si64
+    %m1 = "daphne.ewMul"(%x, %c2) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %m2 = "daphne.ewMul"(%x, %c5) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%m1, %m2) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// EwAdd is not commutative in DAPHNE, so the scaled-leaf fold must match the
+// scaled term on either side. Here the bare copy is the lhs: X + (X * 4) folds
+// to X * 5.
+// CHECK-LABEL: func.func @add_scaled_leaf_commuted_int
+// CHECK-NOT: daphne.ewAdd
+// CHECK: %[[C:.*]] = "daphne.constant"() <{value = 5 : si64}>
+// CHECK: "daphne.ewMul"(%{{.*}}, %[[C]])
+func.func @add_scaled_leaf_commuted_int(%x: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64> {
+    %c4 = "daphne.constant"() {value = 4 : si64} : () -> si64
+    %m = "daphne.ewMul"(%x, %c4) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%x, %m) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// Negative case: the scaled-leaf fold is integer-only, because over floats
+// (c*x) + x and (c+1)*x round differently. With a float element type the ewAdd
+// must survive.
+// CHECK-LABEL: func.func @add_scaled_leaf_float
+// CHECK: daphne.ewAdd
+func.func @add_scaled_leaf_float(%x: !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<2x3xf64> {
+    %c4 = "daphne.constant"() {value = 4.0 : f64} : () -> f64
+    %m = "daphne.ewMul"(%x, %c4) : (!daphne.Matrix<2x3xf64>, f64) -> !daphne.Matrix<2x3xf64>
+    %r = "daphne.ewAdd"(%m, %x) : (!daphne.Matrix<2x3xf64>, !daphne.Matrix<2x3xf64>) -> !daphne.Matrix<2x3xf64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xf64>) -> ()
+}
+
+// Negative case: self-doubling emits an ewMul, which rejects strings, so a
+// string element type must not be rewritten. The ewAdd (string concatenation)
+// must survive.
+// CHECK-LABEL: func.func @self_add_string
+// CHECK: daphne.ewAdd
+func.func @self_add_string(%x: !daphne.Matrix<2x3xstr>) -> !daphne.Matrix<2x3xstr> {
+    %r = "daphne.ewAdd"(%x, %x) : (!daphne.Matrix<2x3xstr>, !daphne.Matrix<2x3xstr>) -> !daphne.Matrix<2x3xstr>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xstr>) -> ()
+}
+
+// Negative case: distinct operands are not a self-addition, so X + Y survives.
+// CHECK-LABEL: func.func @add_distinct_leaves
+// CHECK: daphne.ewAdd
+func.func @add_distinct_leaves(%x: !daphne.Matrix<2x3xsi64>, %y: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64> {
+    %r = "daphne.ewAdd"(%x, %y) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
+// Negative case: the scaled-leaf fold needs a constant factor. Here the factor
+// is a runtime value, so it cannot be folded and the ewAdd survives.
+// CHECK-LABEL: func.func @add_scaled_leaf_nonconst
+// CHECK: daphne.ewAdd
+func.func @add_scaled_leaf_nonconst(%x: !daphne.Matrix<2x3xsi64>, %c: si64) -> !daphne.Matrix<2x3xsi64> {
+    %m = "daphne.ewMul"(%x, %c) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    %r = "daphne.ewAdd"(%m, %x) : (!daphne.Matrix<2x3xsi64>, !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%r) : (!daphne.Matrix<2x3xsi64>) -> ()
+}

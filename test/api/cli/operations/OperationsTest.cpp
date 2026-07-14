@@ -234,3 +234,10 @@ TEST_CASE("rewrite_sum_scalar_factor", TAG_OPERATIONS) {
 // matrix directly, giving no aggregate to match. Their outputs must agree byte
 // for byte, which guards that dropping the aggregate preserves the values.
 TEST_CASE("rewrite_row_agg_dim1", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_row_agg_dim1", 1); }
+
+// Numerically proves the repeated-add fold `X + X + X -> X * 3` end-to-end. The
+// values are near 2^62 so the sum overflows si64; the rewrite must preserve the
+// modular wraparound, so the `.daphne` chain of adds and the `.ref` plain
+// multiply must print the same byte pattern. This is the one property a reviewer
+// cannot check by inspection, so it is proved through the full compiler.
+TEST_CASE("rewrite_repeated_add", TAG_OPERATIONS) { compareDaphneToSelfRefSimple(dirPath, "rewrite_repeated_add", 1); }
