@@ -385,7 +385,7 @@ def Daphne_EwMaxOp    : Daphne_EwBinaryOp<"ewMax", AnyScalar, [ValueTypeFromArgs
 // Logical
 // ----------------------------------------------------------------------------
 
-def Daphne_EwAndOp    : Daphne_EwBinaryOp<"ewAnd", NumScalar, [Commutative, ValueTypeFromArgsInt, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarBool", "foldScalarSInt", "foldScalarUInt"]>]>;
+def Daphne_EwAndOp    : Daphne_EwBinaryOp<"ewAnd", NumScalar, [Commutative, ValueTypeFromArgsInt, CastArgsToResType, LeftAbsorbingOnZero, RightAbsorbingOnZero, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarBool", "foldScalarSInt", "foldScalarUInt"]>]>;
 def Daphne_EwOrOp     : Daphne_EwBinaryOp<"ewOr" , NumScalar, [Commutative, ValueTypeFromArgsInt, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarBool", "foldScalarSInt", "foldScalarUInt"]>]>;
 def Daphne_EwXorOp    : Daphne_EwBinaryOp<"ewXor", NumScalar, [Commutative, ValueTypeFromArgsInt, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarBool", "foldScalarSInt", "foldScalarUInt"]>]>;
 

@@ -185,6 +185,34 @@ func.func @mul_zero_float(%arg0: f64) -> f64 {
     "daphne.return"(%1) : (f64) -> ()
 }
 
+// RightAbsorbingOnZero on EwAndOp: x AND 0 collapses to 0. Sound over the whole
+// integer domain because logical AND is truthiness-based (x && 0 = 0 for every
+// integer x); ewAnd is integer-typed by construction, so no float caveat
+// applies. A second adopter of the absorbing trait, exercised once to catch a
+// broken attachment independently of EwMulOp.
+// CHECK-LABEL: func.func @and_zero_rhs_int
+// CHECK: %[[Z:.*]] = "daphne.constant"() <{value = 0 : si64}>
+// CHECK-NEXT: "daphne.return"(%[[Z]])
+// CHECK-NOT: daphne.ewAnd
+func.func @and_zero_rhs_int(%arg0: si64) -> si64 {
+    %0 = "daphne.constant"() {value = 0 : si64} : () -> si64
+    %1 = "daphne.ewAnd"(%arg0, %0) : (si64, si64) -> si64
+    "daphne.return"(%1) : (si64) -> ()
+}
+
+// Absorbing negative case: a scalar zero AND a matrix must NOT collapse -- the
+// result is an MxN matrix of zeros, not the scalar constant, so the
+// type-equality guard declines. The only matrix-typed absorbing case in the
+// suite, covering the guard that keeps a broadcasting rewrite from shrinking
+// the result to a scalar.
+// CHECK-LABEL: func.func @and_zero_rhs_matrix
+// CHECK: daphne.ewAnd
+func.func @and_zero_rhs_matrix(%arg0: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64> {
+    %0 = "daphne.constant"() {value = 0 : si64} : () -> si64
+    %1 = "daphne.ewAnd"(%arg0, %0) : (!daphne.Matrix<2x3xsi64>, si64) -> !daphne.Matrix<2x3xsi64>
+    "daphne.return"(%1) : (!daphne.Matrix<2x3xsi64>) -> ()
+}
+
 // Involutive on TransposeOp: t(t(X)) collapses to X. The element type is
 // unchanged, but the shape swaps back, so this also confirms the pattern's
 // type-equality guard admits a shape-swapping involution on a rectangular
