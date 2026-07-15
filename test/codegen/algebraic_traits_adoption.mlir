@@ -1,7 +1,7 @@
 // RUN: daphne-opt --daphne-algebraic-simplify %s | FileCheck %s
 
 // Locks in that ops annotated with an algebraic trait are simplified by
-// --daphne-algebraic-simplify. One representative per trait is enough — the
+// --daphne-algebraic-simplify. One representative per trait suffices, since the
 // trait mechanism is the invariant, not the individual op.
 
 // Involutive: EwMinusOp collapses --a to a.
@@ -23,10 +23,10 @@ func.func @single_negate(%arg0: f64) -> f64 {
     "daphne.return"(%0) : (f64) -> ()
 }
 
-// IdempotentUnary: EwAbs collapses abs(abs(x)) to a single abs(x). Unlike Involutive
-// the inner *result* is kept, so exactly one ewAbs must survive and be returned
-// directly -- an integer arg makes a wrong involutive-style rewrite (returning
-// the bare %arg0) visible as a missing ewAbs.
+// IdempotentUnary: EwAbs collapses abs(abs(x)) to a single abs(x). Unlike
+// Involutive the inner result is kept, so exactly one ewAbs must survive and be
+// returned directly. An integer arg makes a wrong involutive-style rewrite
+// (returning the bare %arg0) visible as a missing ewAbs.
 // CHECK-LABEL: func.func @double_abs
 // CHECK-SAME: (%[[ARG:.*]]: si64) -> si64
 // CHECK-NEXT: %[[R:.*]] = "daphne.ewAbs"(%[[ARG]])
@@ -78,7 +78,7 @@ func.func @floor_float_scalar(%arg0: f64) -> f64 {
 }
 
 // IdentityOnIntegerElementType also fires on matrix operands with integer
-// element type — checked here for ceil to exercise a second adopter.
+// element type, checked here for ceil to exercise a second adopter.
 // CHECK-LABEL: func.func @ceil_int_matrix
 // CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x3xsi64>
 // CHECK-NEXT: "daphne.return"(%[[ARG]])
@@ -88,7 +88,7 @@ func.func @ceil_int_matrix(%arg0: !daphne.Matrix<2x3xsi64>) -> !daphne.Matrix<2x
     "daphne.return"(%0) : (!daphne.Matrix<2x3xsi64>) -> ()
 }
 
-// Round on a float matrix must survive — third adopter, exercised on the
+// Round on a float matrix must survive: third adopter, exercised on the
 // negative side to confirm the trait's element-type gate is honored.
 // CHECK-LABEL: func.func @round_float_matrix
 // CHECK: daphne.ewRound
@@ -130,7 +130,7 @@ func.func @add_nonzero_scalar(%arg0: f64) -> f64 {
 }
 
 // NeutralOnZeroRHS on EwSubOp: x - 0 collapses to x. This stays valid over
-// floats for a *positive* zero RHS (x - 0.0 = x is exact for every IEEE value),
+// floats for a positive zero RHS (x - 0.0 = x is exact for every IEEE value),
 // so unlike ewAdd it is not gated to integers. Exercising the second adopter
 // also catches a broken trait attachment on EwSubOp independently.
 // CHECK-LABEL: func.func @sub_zero_scalar
@@ -143,7 +143,7 @@ func.func @sub_zero_scalar(%arg0: f64) -> f64 {
     "daphne.return"(%1) : (f64) -> ()
 }
 
-// NeutralOnZeroRHS negative case: a *negative* zero RHS must NOT be dropped.
+// NeutralOnZeroRHS negative case: a negative zero RHS must NOT be dropped.
 // x - (-0.0) = x + 0.0, which flips a -0.0 argument to +0.0, so the identity
 // fails for negative zero and the ewSub must survive.
 // CHECK-LABEL: func.func @sub_neg_zero_scalar
@@ -236,7 +236,7 @@ func.func @and_zero_rhs_int(%arg0: si64) -> si64 {
     "daphne.return"(%1) : (si64) -> ()
 }
 
-// Absorbing negative case: a scalar zero AND a matrix must NOT collapse -- the
+// Absorbing negative case: a scalar zero AND a matrix must NOT collapse. The
 // result is an MxN matrix of zeros, not the scalar constant, so the
 // type-equality guard declines. The only matrix-typed absorbing case in the
 // suite, covering the guard that keeps a broadcasting rewrite from shrinking
@@ -331,9 +331,46 @@ func.func @agg_reorder_chain(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {
     "daphne.return"(%2) : (f64) -> ()
 }
 
-// Negative case: minAll is not tagged OrderAgnosticAggregate, so the reorder
-// must survive. min over a reordered matrix is equal in value, but the rewrite
-// stays fail-closed to the one aggregate whose result op it can rebuild.
+// meanAll over a transpose folds to meanAll on the original. Locks in the trait
+// token on meanAll and that the generic clone rebuilds a meanAll (not a sumAll):
+// the CHECK for "daphne.meanAll" fails if a regressed clone changed the op class.
+// CHECK-LABEL: func.func @agg_reorder_mean_transpose
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<?x?xf64>)
+// CHECK: "daphne.meanAll"(%[[ARG]])
+// CHECK-NOT: daphne.transpose
+func.func @agg_reorder_mean_transpose(%arg0: !daphne.Matrix<?x?xf64>) -> f64 {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<?x?xf64>) -> !daphne.Matrix<?x?xf64>
+    %1 = "daphne.meanAll"(%0) : (!daphne.Matrix<?x?xf64>) -> f64
+    "daphne.return"(%1) : (f64) -> ()
+}
+
+// Third adopter and a second reorder producer: stddevAll over a reverse folds,
+// catching a broken trait attachment on stddevAll independently of the others.
+// CHECK-LABEL: func.func @agg_reorder_stddev_reverse
+// CHECK-SAME: (%[[ARG:.*]]: !daphne.Matrix<3x4xf64>)
+// CHECK: "daphne.stddevAll"(%[[ARG]])
+// CHECK-NOT: daphne.reverse
+func.func @agg_reorder_stddev_reverse(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {
+    %0 = "daphne.reverse"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<3x4xf64>
+    %1 = "daphne.stddevAll"(%0) : (!daphne.Matrix<3x4xf64>) -> f64
+    "daphne.return"(%1) : (f64) -> ()
+}
+
+// Negative case: single-axis reductions are not order-agnostic. meanRow(t(X))
+// equals meanCol(X), not meanRow(X), so the transpose must survive. Only the
+// absent trait token keeps meanRow untouched here; the old sum-specialised
+// pattern made the fold structurally impossible.
+// CHECK-LABEL: func.func @agg_reorder_meanrow_not_agnostic
+// CHECK: daphne.transpose
+func.func @agg_reorder_meanrow_not_agnostic(%arg0: !daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x1xf64> {
+    %0 = "daphne.transpose"(%arg0) : (!daphne.Matrix<3x4xf64>) -> !daphne.Matrix<4x3xf64>
+    %1 = "daphne.meanRow"(%0) : (!daphne.Matrix<4x3xf64>) -> !daphne.Matrix<4x1xf64>
+    "daphne.return"(%1) : (!daphne.Matrix<4x1xf64>) -> ()
+}
+
+// Negative case: minAll is deliberately left untagged. Its value is
+// permutation-invariant too, but min/max are intentionally out of scope, so the
+// trait gate never fires and the reorder survives.
 // CHECK-LABEL: func.func @agg_reorder_min_not_agnostic
 // CHECK: daphne.transpose
 func.func @agg_reorder_min_not_agnostic(%arg0: !daphne.Matrix<3x4xf64>) -> f64 {

@@ -215,8 +215,8 @@ class Daphne_NumOp<string name, list<Trait> traits = []> : Daphne_Op<name, !list
 
 def Daphne_NumRowsOp : Daphne_NumOp<"numRows"> {
     // Pure op whose result, when the operand's shape is statically known, is a
-    // single index constant read from the type. That is the textbook shape for
-    // a folder, so we use one instead of a canonicalize rewrite.
+    // single index constant read from the type. That folds directly, so we use
+    // a folder instead of a canonicalize rewrite.
     let hasFolder = 1;
 }
 def Daphne_NumColsOp : Daphne_NumOp<"numCols"> {
@@ -231,9 +231,8 @@ def Daphne_SparsityOp : Daphne_Op<"sparsity", [DataTypeSca, Pure]> {
   let results = (outs FloatScalar:$res);
 
   // Pure op whose result, when the operand's sparsity is known, is a single
-  // f64 constant read from the type. Like the shape queries, this is the
-  // textbook folder shape, so we use a folder rather than a canonicalize
-  // rewrite.
+  // f64 constant read from the type. Like the shape queries, this folds
+  // directly, so we use a folder rather than a canonicalize rewrite.
   let hasFolder = 1;
 }
 
@@ -521,9 +520,9 @@ class Daphne_AllAggOp<string name, Type scalarType, list<Trait> traits = []>
 def Daphne_AllAggSumOp    : Daphne_AllAggOp<"sumAll", NumScalar, [ValueTypeFromFirstArg, OrderAgnosticAggregate, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
 def Daphne_AllAggMinOp    : Daphne_AllAggOp<"minAll", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
 def Daphne_AllAggMaxOp    : Daphne_AllAggOp<"maxAll", NumScalar, [ValueTypeFromFirstArg, DeclareOpInterfaceMethods<VectorizableOpInterface>]>;
-def Daphne_AllAggMeanOp   : Daphne_AllAggOp<"meanAll", NumScalar, [ValueTypeFromArgsFP]>;
-def Daphne_AllAggVarOp    : Daphne_AllAggOp<"varAll", NumScalar, [ValueTypeFromArgsFP]>;
-def Daphne_AllAggStddevOp : Daphne_AllAggOp<"stddevAll", NumScalar, [ValueTypeFromArgsFP]>;
+def Daphne_AllAggMeanOp   : Daphne_AllAggOp<"meanAll", NumScalar, [ValueTypeFromArgsFP, OrderAgnosticAggregate]>;
+def Daphne_AllAggVarOp    : Daphne_AllAggOp<"varAll", NumScalar, [ValueTypeFromArgsFP, OrderAgnosticAggregate]>;
+def Daphne_AllAggStddevOp : Daphne_AllAggOp<"stddevAll", NumScalar, [ValueTypeFromArgsFP, OrderAgnosticAggregate]>;
 
 // ----------------------------------------------------------------------------
 // Row/column-wise aggregation

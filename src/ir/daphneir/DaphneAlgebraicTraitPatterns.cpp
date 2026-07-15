@@ -18,6 +18,7 @@
 
 #include "ir/daphneir/Daphne.h"
 
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 
 using namespace mlir;
@@ -33,9 +34,8 @@ static Type getMatrixElementTypeOrNull(Value v) {
 
 // Returns true when `v` has an integer element type (matrix element type for a
 // matrix, the value type itself for a scalar). Absorbing/neutral rewrites that
-// discard an operand are only valid over integers: IEEE floating point has
-// NaN*0 = NaN, Inf*0 = NaN, and (-0.0)+0.0 = +0.0, none of which the algebraic
-// identity preserves.
+// drop an operand are only valid over integers; the IEEE float cases they'd
+// break (NaN*0, Inf*0, (-0.0)+0.0) are ruled out by keeping them integer-only.
 static bool hasIntegerElementType(Value v) {
     Type elemTy = getMatrixElementTypeOrNull(v);
     if (!elemTy)
@@ -44,9 +44,9 @@ static bool hasIntegerElementType(Value v) {
 }
 
 // Returns true when `v` is a ConstantLike op whose scalar value is zero. Over
-// floats only *positive* zero counts: negative zero is excluded because the
-// neutral/absorbing identities do not hold for it (e.g. x - (-0.0) = x + 0.0
-// flips -0.0 to +0.0), so a rewrite that discarded it would miscompute.
+// floats only positive zero counts. Negative zero is excluded because the
+// neutral/absorbing identities don't hold for it (e.g. x - (-0.0) = x + 0.0
+// flips -0.0 to +0.0), so dropping it would miscompute.
 static bool isConstantZero(Value v) {
     return matchPattern(v, m_Zero()) || matchPattern(v, m_PosZeroFloat());
 }
@@ -88,11 +88,11 @@ struct InvolutivePattern : public RewritePattern {
 /**
  * @brief Collapses `f(f(x))` to `f(x)` for any op tagged `IdempotentUnary`.
  *
- * Keeps the inner op's *result* (this op's operand), not its input -- the one
- * load-bearing difference from `InvolutivePattern`. An already-computed value is
- * forwarded unchanged, so no integer-only or signed-zero/NaN caveat applies. The
- * type-equality guard fail-closes for any adopter whose result type could differ
- * from its operand type.
+ * Keeps the inner op's result (this op's operand) rather than its input, which
+ * is the difference from `InvolutivePattern`. Since it forwards an
+ * already-computed value unchanged, no integer-only or signed-zero/NaN caveat
+ * applies. The type-equality guard fail-closes for any adopter whose result
+ * type could differ from its operand type.
  */
 struct IdempotentUnaryPattern : public RewritePattern {
     IdempotentUnaryPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
@@ -122,16 +122,16 @@ struct IdempotentUnaryPattern : public RewritePattern {
  * @brief Collapses `agg(reorder(X))` to `agg(X)`.
  *
  * An order-agnostic reduction over every element (outer op tagged
- * `OrderAgnosticAggregate`) is invariant under any producer that only permutes
+ * `OrderAgnosticAggregate`) is invariant under a producer that only permutes
  * elements without changing their multiset (inner op tagged
- * `OnlyReordersElements`, e.g. transpose or reverse), so the reorder is dead and
- * can be dropped. Both `Pure`, so DCE removes the now-unused inner op.
+ * `OnlyReordersElements`, e.g. transpose or reverse), so the reorder is dead.
+ * Both are Pure, so DCE removes the now-unused inner op.
  *
- * The rewrite is currently specialised to `AllAggSumOp`: it rebuilds a sumAll,
- * so it must refuse to fire on any other op that later adopts
- * `OrderAgnosticAggregate` (rewriting it into a sum would miscompute). The
- * inner operand must be a matrix -- the only thing an aggregate reduces --
- * matching the fail-closed style of the other trait patterns.
+ * The matched aggregate is rebuilt generically on the reorder's input, so every
+ * All-agg reduction adopting the trait (sumAll, meanAll, varAll, stddevAll)
+ * folds from one pattern. Like any order-agnostic reduction this reassociates a
+ * floating-point sum, which is the tolerance the trait licenses. The inner
+ * operand must be a matrix, the only thing an aggregate reduces.
  */
 struct ReorderAgnosticAggPattern : public RewritePattern {
     ReorderAgnosticAggPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
@@ -140,8 +140,6 @@ struct ReorderAgnosticAggPattern : public RewritePattern {
         if (!op->hasTrait<OpTrait::OrderAgnosticAggregate>())
             return failure();
         if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-            return failure();
-        if (!llvm::isa<daphne::AllAggSumOp>(op))
             return failure();
 
         Operation *inner = op->getOperand(0).getDefiningOp();
@@ -152,9 +150,15 @@ struct ReorderAgnosticAggPattern : public RewritePattern {
         if (!getMatrixElementTypeOrNull(inner->getOperand(0)))
             return failure();
 
-        // The aggregate's scalar result type is unchanged: sumAll's value type
-        // comes from its argument's element type, which the reorder preserves.
-        rewriter.replaceOpWithNewOp<daphne::AllAggSumOp>(op, op->getResult(0).getType(), inner->getOperand(0));
+        // Clone the matched aggregate with its single operand remapped to the
+        // reorder's input rather than hard-coding one op class. The reorder
+        // preserves the element type, so the clone keeps its already-inferred
+        // result type. The arity guards above keep this well-formed for the
+        // single-operand All-agg family.
+        IRMapping map;
+        map.map(op->getOperand(0), inner->getOperand(0));
+        Operation *rebuilt = rewriter.clone(*op, map);
+        rewriter.replaceOp(op, rebuilt->getResults());
         return success();
     }
 };
@@ -263,10 +267,10 @@ struct NeutralOnOneRHSPattern : public RewritePattern {
 /**
  * @brief Replaces `f(0, x)` with `0` for any op tagged `LeftAbsorbingOnZero`.
  *
- * Restricted to integer element types: over IEEE floating point the identity
- * `0 * x = 0` is false (NaN * 0 = NaN, Inf * 0 = NaN). Fires only when the zero
- * operand's type equals the op's result type, so broadcasting cases (scalar
- * zero * matrix) do not accidentally shrink the result to a scalar.
+ * Restricted to integer element types: over IEEE floating point `0 * x = 0` is
+ * false (NaN * 0 = NaN, Inf * 0 = NaN). Fires only when the zero operand's type
+ * equals the op's result type, so broadcasting cases (scalar zero * matrix) do
+ * not shrink the result to a scalar.
  */
 struct LeftAbsorbingOnZeroPattern : public RewritePattern {
     LeftAbsorbingOnZeroPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
