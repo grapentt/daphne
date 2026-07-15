@@ -23,6 +23,42 @@ func.func @single_negate(%arg0: f64) -> f64 {
     "daphne.return"(%0) : (f64) -> ()
 }
 
+// IdempotentUnary: EwAbs collapses abs(abs(x)) to a single abs(x). Unlike Involutive
+// the inner *result* is kept, so exactly one ewAbs must survive and be returned
+// directly -- an integer arg makes a wrong involutive-style rewrite (returning
+// the bare %arg0) visible as a missing ewAbs.
+// CHECK-LABEL: func.func @double_abs
+// CHECK-SAME: (%[[ARG:.*]]: si64) -> si64
+// CHECK-NEXT: %[[R:.*]] = "daphne.ewAbs"(%[[ARG]])
+// CHECK-NEXT: "daphne.return"(%[[R]])
+// CHECK-NOT: daphne.ewAbs
+func.func @double_abs(%arg0: si64) -> si64 {
+    %0 = "daphne.ewAbs"(%arg0) : (si64) -> si64
+    %1 = "daphne.ewAbs"(%0) : (si64) -> si64
+    "daphne.return"(%1) : (si64) -> ()
+}
+
+// IdempotentUnary negative case: a lone ewAbs must survive.
+// CHECK-LABEL: func.func @single_abs
+// CHECK: daphne.ewAbs
+func.func @single_abs(%arg0: si64) -> si64 {
+    %0 = "daphne.ewAbs"(%arg0) : (si64) -> si64
+    "daphne.return"(%0) : (si64) -> ()
+}
+
+// IdempotentUnary second adopter: sign(sign(x)) collapses to a single sign(x),
+// catching a broken attachment on EwSignOp independently of EwAbsOp.
+// CHECK-LABEL: func.func @double_sign
+// CHECK-SAME: (%[[ARG:.*]]: si64) -> si64
+// CHECK-NEXT: %[[R:.*]] = "daphne.ewSign"(%[[ARG]])
+// CHECK-NEXT: "daphne.return"(%[[R]])
+// CHECK-NOT: daphne.ewSign
+func.func @double_sign(%arg0: si64) -> si64 {
+    %0 = "daphne.ewSign"(%arg0) : (si64) -> si64
+    %1 = "daphne.ewSign"(%0) : (si64) -> si64
+    "daphne.return"(%1) : (si64) -> ()
+}
+
 // IdentityOnIntegerElementType: floor of a signed integer scalar is a no-op.
 // CHECK-LABEL: func.func @floor_int_scalar
 // CHECK-SAME: (%[[ARG:.*]]: si64) -> si64

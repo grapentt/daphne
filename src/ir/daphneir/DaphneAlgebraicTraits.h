@@ -27,6 +27,8 @@ namespace mlir::OpTrait {
 
 template <class ConcreteOp> class Involutive : public TraitBase<ConcreteOp, Involutive> {};
 
+template <class ConcreteOp> class IdempotentUnary : public TraitBase<ConcreteOp, IdempotentUnary> {};
+
 template <class ConcreteOp>
 class IdentityOnIntegerElementType : public TraitBase<ConcreteOp, IdentityOnIntegerElementType> {};
 

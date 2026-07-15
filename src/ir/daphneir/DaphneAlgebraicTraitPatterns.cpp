@@ -86,6 +86,39 @@ struct InvolutivePattern : public RewritePattern {
 };
 
 /**
+ * @brief Collapses `f(f(x))` to `f(x)` for any op tagged `IdempotentUnary`.
+ *
+ * Keeps the inner op's *result* (this op's operand), not its input -- the one
+ * load-bearing difference from `InvolutivePattern`. An already-computed value is
+ * forwarded unchanged, so no integer-only or signed-zero/NaN caveat applies. The
+ * type-equality guard fail-closes for any adopter whose result type could differ
+ * from its operand type.
+ */
+struct IdempotentUnaryPattern : public RewritePattern {
+    IdempotentUnaryPattern(MLIRContext *ctx) : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+        if (!op->hasTrait<OpTrait::IdempotentUnary>())
+            return failure();
+        if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+            return failure();
+
+        Operation *inner = op->getOperand(0).getDefiningOp();
+        if (!inner || inner->getName() != op->getName())
+            return failure();
+        if (inner->getNumOperands() != 1 || inner->getNumResults() != 1)
+            return failure();
+
+        Value innerResult = op->getOperand(0);
+        if (innerResult.getType() != op->getResult(0).getType())
+            return failure();
+
+        rewriter.replaceOp(op, innerResult);
+        return success();
+    }
+};
+
+/**
  * @brief Collapses `agg(reorder(X))` to `agg(X)`.
  *
  * An order-agnostic reduction over every element (outer op tagged
@@ -289,7 +322,7 @@ namespace mlir::daphne {
 
 void populateAlgebraicTraitPatterns(RewritePatternSet &patterns) {
     MLIRContext *ctx = patterns.getContext();
-    patterns.add<InvolutivePattern, IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern,
+    patterns.add<InvolutivePattern, IdempotentUnaryPattern, IdentityOnIntegerElementTypePattern, IdentityWhenSymmetricPattern,
                  ReorderAgnosticAggPattern, NeutralOnZeroRHSPattern, NeutralOnOneRHSPattern,
                  LeftAbsorbingOnZeroPattern, RightAbsorbingOnZeroPattern>(ctx);
 }

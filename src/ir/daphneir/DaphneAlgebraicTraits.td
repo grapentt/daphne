@@ -27,6 +27,12 @@ include "mlir/IR/OpBase.td"
 // whose result type differs from the operand type (e.g. TransposeOp).
 def Involutive : NativeOpTrait<"Involutive">;
 
+// f(f(x)) = f(x): f's output is already a fixed point (e.g. abs is non-negative,
+// sign is in {-1, 0, 1}). Named to avoid upstream Idempotent, whose IsIdempotent
+// static_asserts SameOperandsAndResultType (DAPHNE ops lack it) and also covers
+// the binary g(x, x) = x case.
+def IdempotentUnary : NativeOpTrait<"IdempotentUnary">;
+
 // f(X) = X when X's element type is any integer.
 def IdentityOnIntegerElementType : NativeOpTrait<"IdentityOnIntegerElementType">;
 
