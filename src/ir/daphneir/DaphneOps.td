@@ -370,7 +370,7 @@ def Daphne_EwMulOp    : Daphne_EwBinaryOp<"ewMul", NumScalar, [ValueTypeFromArgs
 def Daphne_EwDivOp    : Daphne_EwBinaryOp<"ewDiv", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport, NeutralOnOneRHS, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat", "foldScalarSInt", "foldScalarUInt"]>]> {
     let hasCanonicalizeMethod = 1;
 }
-def Daphne_EwPowOp    : Daphne_EwBinaryOp<"ewPow", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat"]>]>;
+def Daphne_EwPowOp    : Daphne_EwBinaryOp<"ewPow", NumScalar, [ValueTypeFromArgs, CastArgsToResType, CUDASupport, NeutralOnOneRHS, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat"]>]>;
 def Daphne_EwModOp    : Daphne_EwBinaryOp<"ewMod", NumScalar, [ValueTypeFromArgs, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarSInt", "foldScalarUInt"]>]>;
 def Daphne_EwLogOp    : Daphne_EwBinaryOp<"ewLog", NumScalar, [ValueTypeFromArgsFP, CastArgsToResType, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarFloat"]>]>;
 
