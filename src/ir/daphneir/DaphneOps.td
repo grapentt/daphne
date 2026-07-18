@@ -649,7 +649,7 @@ def Daphne_ExtractOp : Daphne_Op<"extract", [
 def Daphne_ExtractRowOp : Daphne_Op<"extractRow", [
     TypeFromFirstArg,
     DeclareOpInterfaceMethods<InferFrameLabelsOpInterface>,
-    NumRowsFromIthArg<1>, NumColsFromArg
+    NumRowsFromIthArg<1>, NumColsFromArg, Pure
 ]> {
     let summary = "Copies the specified rows from the argument to the result.";
 
@@ -671,7 +671,7 @@ def Daphne_ExtractRowOp : Daphne_Op<"extractRow", [
 
 def Daphne_SliceRowOp : Daphne_Op<"sliceRow", [
     TypeFromFirstArg,
-    DeclareOpInterfaceMethods<InferShapeOpInterface>
+    DeclareOpInterfaceMethods<InferShapeOpInterface>, Pure
 ]> {
     let summary = "Copies the specified rows from the argument to the result.";
 
@@ -715,7 +715,7 @@ def Daphne_ExtractColOp : Daphne_Op<"extractCol", [
 
 def Daphne_SliceColOp : Daphne_Op<"sliceCol", [
     DeclareOpInterfaceMethods<InferTypesOpInterface>,
-    DeclareOpInterfaceMethods<InferShapeOpInterface>
+    DeclareOpInterfaceMethods<InferShapeOpInterface>, Pure
 ]> {
     let summary = "Copies the specified columns from the argument to the result.";
 
@@ -732,7 +732,7 @@ def Daphne_SliceColOp : Daphne_Op<"sliceCol", [
 
 def Daphne_InsertRowOp : Daphne_Op<"insertRow", [
     TypeFromFirstArg, // this is debatable
-    ShapeFromArg
+    ShapeFromArg, Pure
 ]> {
     let arguments = (ins MatrixOrFrame:$arg, MatrixOrFrame:$ins, SI64:$rowLowerIncl, SI64:$rowUpperExcl);
     let results = (outs MatrixOrFrame:$res);
@@ -740,7 +740,7 @@ def Daphne_InsertRowOp : Daphne_Op<"insertRow", [
 
 def Daphne_InsertColOp : Daphne_Op<"insertCol", [
     TypeFromFirstArg, // this is debatable
-    ShapeFromArg
+    ShapeFromArg, Pure
 ]> {
     let arguments = (ins MatrixOrFrame:$arg, MatrixOrFrame:$ins, SI64:$colLowerIncl, SI64:$colUpperExcl);
     let results = (outs MatrixOrFrame:$res);
