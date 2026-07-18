@@ -162,6 +162,11 @@ struct ReorderAgnosticAggPattern : public RewritePattern {
         return success();
     }
 };
+
+/**
+ * @brief Replaces `f(X)` with `X` for any op tagged `IdentityOnIntegerElementType`
+ *        when X has an integer element type and the result type matches.
+ */
 struct IdentityOnIntegerElementTypePattern : public RewritePattern {
     IdentityOnIntegerElementTypePattern(MLIRContext *ctx)
         : RewritePattern(MatchAnyOpTypeTag{}, /*benefit=*/1, ctx) {}
