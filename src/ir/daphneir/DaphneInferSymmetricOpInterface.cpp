@@ -17,11 +17,11 @@
 #include <compiler/utils/CompilerUtils.h>
 #include <ir/daphneir/Daphne.h>
 
+#include <vector>
+
 namespace mlir::daphne {
 #include <ir/daphneir/DaphneInferSymmetricOpInterface.cpp.inc>
 }
-
-#include <vector>
 
 using namespace mlir;
 using namespace mlir::OpTrait;
@@ -36,8 +36,8 @@ std::vector<BoolOrUnknown> daphne::FillOp::inferSymmetric() {
     std::pair numCols = CompilerUtils::isConstant<ssize_t>(getNumCols());
     if (numRows.first && numCols.first) // the shape is known
         return {numRows.second == numCols.second ? BoolOrUnknown::True : BoolOrUnknown::False};
-    else // the shape is unknown
-        return {BoolOrUnknown::Unknown};
+    // the shape is unknown
+    return {BoolOrUnknown::Unknown};
 }
 
 std::vector<BoolOrUnknown> daphne::TransposeOp::inferSymmetric() {
