@@ -202,9 +202,11 @@ Reference table for manual overrides:
 
 | Available RAM | `DAPHNE_COMPILE_JOBS` | `DAPHNE_KERNEL_COMPILE_JOBS` |
 |---|---|---|
-| ≥ 8 GB | `3` | `3` |
+| 8 GB | `3` | `3` |
 | 6 GB | `2` | `2` |
 | 4 GB | `1` | `1` |
+
+Above 8 GB the recommended count keeps growing: auto-detection uses `floor((RAM_GB - 1) / 2)`, capped at your core count. For example a 16 GB host gets `7` and a 32 GB host gets `15` (or `nproc`, whichever is smaller), so setting a flat `3` on a large host would leave most cores idle.
 
 Leave both options unset to use auto-detection (recommended). The auto-detected values follow a conservative "2 GB per parallel slot" rule; raise them if you know your compile TUs peak lower on your system.
 
