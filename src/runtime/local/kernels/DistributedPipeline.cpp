@@ -35,6 +35,7 @@ void distributedPipeline(DTRes **outputs, size_t numOutputs, const Structure **i
         res[i] = outputs + i;
     wrapper->execute(irCode, res, inputs, numInputs, numOutputs, outRows, outCols,
                      reinterpret_cast<VectorSplit *>(splits), reinterpret_cast<VectorCombine *>(combines));
+    delete[] res;
 }
 
 // Explicit instantiations for the types listed under this kernel in
