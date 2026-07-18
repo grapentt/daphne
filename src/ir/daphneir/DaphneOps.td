@@ -819,6 +819,8 @@ def Daphne_OrderOp : Daphne_Op<"order", [
 // Matrix decompositions & co
 // ****************************************************************************
 
+// Mark a decomposition Pure only once it has a deterministic kernel: eigenCal
+// does, so it is CSE/DCE-eligible; lu/qr/svd have none yet and stay untagged.
 def Daphne_EigenOp : Daphne_Op<"eigenCal", [TypeFromFirstArg, DeclareOpInterfaceMethods<InferTypesOpInterface>,
         DeclareOpInterfaceMethods<InferShapeOpInterface>, Pure]> {
     let arguments = (ins MatrixOf<[FloatScalar]>:$arg);
