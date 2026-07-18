@@ -121,6 +121,8 @@ bool DaphneIrExecutor::runPasses(mlir::ModuleOp module) {
     if (userConfig_.explain_parsing)
         pm.addPass(mlir::daphne::createPrintIRPass("IR after parsing:"));
 
+    // First simplification pass right after parsing: canonicalize, then CSE to
+    // drop the duplicate ops it exposes.
     pm.addPass(mlir::createCanonicalizerPass());
     pm.addPass(mlir::createCSEPass());
     if (userConfig_.explain_parsing_simplified)
