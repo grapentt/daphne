@@ -28,13 +28,14 @@ using namespace mlir;
 namespace {
 
 /**
- * @brief Applies algebraic-trait-driven rewrites to the DAPHNE IR.
+ * @brief Applies algebraic simplification rewrites to the DAPHNE IR.
  *
- * The pass runs the generic rewrite drivers registered by
- * `populateAlgebraicTraitPatterns` against every op in the module. Each driver
- * gates on a specific op trait (Involutive, NeutralOnZeroRHS,
- * etc.), so the pass automatically picks up new adopters without further
- * modification.
+ * The pass runs two families of rewrite drivers against every op in the module:
+ * - The trait-driven patterns from `populateAlgebraicTraitPatterns` each gate on
+ *   a specific op trait (Involutive, NeutralOnZeroRHS, etc.), so the pass picks
+ *   up new adopters of those traits without further modification.
+ * - The structural patterns from `populateLinearAlgebraRewritePatterns` instead
+ *   match a specific chain of ops and replace it with a cheaper equivalent one.
  */
 struct AlgebraicSimplifyPass : public PassWrapper<AlgebraicSimplifyPass, OperationPass<ModuleOp>> {
     void getDependentDialects(DialectRegistry &registry) const override { registry.insert<daphne::DaphneDialect>(); }
