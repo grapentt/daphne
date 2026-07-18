@@ -178,7 +178,7 @@ Compiling the pre-compiled kernels library instantiates many kernel templates. E
 
 ```
 Memory-constrained host detected (8 GB available)
-Auto-setting COMPILE_JOBS=3, KERNEL_COMPILE_JOBS=3 to prevent OOM
+Using COMPILE_JOBS=3, KERNEL_COMPILE_JOBS=3 to prevent OOM
 Override by setting DAPHNE_COMPILE_JOBS / DAPHNE_KERNEL_COMPILE_JOBS env vars
 ```
 

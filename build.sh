@@ -1315,13 +1315,16 @@ if [ -z "${DAPHNE_COMPILE_JOBS:-}" ] || [ -z "${DAPHNE_KERNEL_COMPILE_JOBS:-}" ]
     _avail_gb=$(get_memory_gb)
     read -r _auto_cj _auto_kj <<< "$(calc_daphne_jobs "$_avail_gb")"
     _nproc=$(get_nproc)
-    if [ "$_auto_cj" -lt "$_nproc" ]; then
-        daphne_msg "Memory-constrained host detected (${_avail_gb} GB available)"
-        daphne_msg "Auto-setting COMPILE_JOBS=${_auto_cj}, KERNEL_COMPILE_JOBS=${_auto_kj} to prevent OOM"
-        daphne_msg "Override by setting DAPHNE_COMPILE_JOBS / DAPHNE_KERNEL_COMPILE_JOBS env vars"
-    fi
     : "${DAPHNE_COMPILE_JOBS:=$_auto_cj}"
     : "${DAPHNE_KERNEL_COMPILE_JOBS:=$_auto_kj}"
+    # Report the values the build will actually use, which may be a mix of a
+    # preset env var and an auto-detected default, rather than the raw auto
+    # values (those can differ from the effective ones when a knob is preset).
+    if [ "$DAPHNE_COMPILE_JOBS" -lt "$_nproc" ]; then
+        daphne_msg "Memory-constrained host detected (${_avail_gb} GB available)"
+        daphne_msg "Using COMPILE_JOBS=${DAPHNE_COMPILE_JOBS}, KERNEL_COMPILE_JOBS=${DAPHNE_KERNEL_COMPILE_JOBS} to prevent OOM"
+        daphne_msg "Override by setting DAPHNE_COMPILE_JOBS / DAPHNE_KERNEL_COMPILE_JOBS env vars"
+    fi
 fi
 
 # Pass the job counts on to cmake/ninja.
