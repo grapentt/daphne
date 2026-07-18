@@ -60,6 +60,7 @@ set(TEST_SOURCES
         build/BuildHelpersTest.cpp
 
         codegen/CodegenTest.cpp
+        cse/CseTest.cpp
         api/cli/codegen/AggAllTest.cpp
         # api/cli/codegen/AggDimTest.cpp
         # api/cli/codegen/EwBinaryTest.cpp

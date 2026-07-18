@@ -28,6 +28,7 @@
 #define TAG_CODEGEN "[codegen]"
 #define TAG_CONFIG "[config]"
 #define TAG_CONTROLFLOW "[controlflow]"
+#define TAG_CSE "[cse]"
 #define TAG_DAPHNELIB "[daphnelib]"
 #define TAG_DATASTRUCTURES "[datastructures]"
 #define TAG_DISTRIBUTED "[distributed]"
