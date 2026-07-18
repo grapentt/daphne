@@ -111,7 +111,6 @@ execute_process(
     ${Python3_EXECUTABLE} checkExplicitInstantiations.py kernels.json
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/runtime/local/kernels/
   RESULT_VARIABLE _checkExplicitInstantiations_result
-  OUTPUT_VARIABLE _checkExplicitInstantiations_stdout
   ERROR_VARIABLE _checkExplicitInstantiations_stderr)
 if(NOT _checkExplicitInstantiations_result EQUAL 0)
     message(FATAL_ERROR
