@@ -1342,7 +1342,7 @@ def Daphne_ColSelectLtOp : Daphne_ColSelectCmpOp<"colSelectLt">;
 def Daphne_ColSelectLeOp : Daphne_ColSelectCmpOp<"colSelectLe">;
 
 def Daphne_ColProjectOp : Daphne_Op<"colProject", [
-    DataTypeCol, ValueTypeFromFirstArg
+    DataTypeCol, ValueTypeFromFirstArg, Pure
 ]> {
     let summary = "Projection on columnar data; input: data, positions; output: data.";
     let description = [{
@@ -1382,7 +1382,7 @@ def Daphne_ColMergeOp : Daphne_ColSetOp<"colMerge"> {
 }
 
 def Daphne_ColJoinOp : Daphne_Op<"colJoin", [
-    DeclareOpInterfaceMethods<InferTypesOpInterface>
+    DeclareOpInterfaceMethods<InferTypesOpInterface>, Pure
 ]> {
     let summary = "N:1 equi-join on columnar data; input: data, unique data; output: sorted positions, positions.";
     let description = [{
@@ -1398,7 +1398,7 @@ def Daphne_ColJoinOp : Daphne_Op<"colJoin", [
 }
 
 def Daphne_ColSemiJoinOp : Daphne_Op<"colSemiJoin", [
-    DataTypeCol, ValueTypeSize
+    DataTypeCol, ValueTypeSize, Pure
 ]> {
     let summary = "Semi-join on columnar data; input: data, data, output: sorted positions.";
     let description = [{
@@ -1411,7 +1411,7 @@ def Daphne_ColSemiJoinOp : Daphne_Op<"colSemiJoin", [
 }
 
 def Daphne_ColGroupFirstOp : Daphne_Op<"colGroupFirst", [
-    DeclareOpInterfaceMethods<InferTypesOpInterface>
+    DeclareOpInterfaceMethods<InferTypesOpInterface>, Pure
 ]> {
     let summary = "Initial grouping step on columnar data; input: data; output: positions (group ids), positions (of representatives).";
     let description = [{
@@ -1427,7 +1427,7 @@ def Daphne_ColGroupFirstOp : Daphne_Op<"colGroupFirst", [
 }
 
 def Daphne_ColGroupNextOp : Daphne_Op<"colGroupNext", [
-    DeclareOpInterfaceMethods<InferTypesOpInterface>
+    DeclareOpInterfaceMethods<InferTypesOpInterface>, Pure
 ]> {
     let summary = "Subsequent grouping step on columnar data; input: data, positions (group ids); output: positions (group ids), positions (of representatives).";
     let description = [{
