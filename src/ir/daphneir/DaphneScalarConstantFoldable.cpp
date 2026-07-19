@@ -83,13 +83,16 @@ template <> std::pair<IntegerAttr, IntegerAttr> promoteWidth(IntegerAttr lhs, In
     unsigned rw = rTy.getIntOrFloatBitWidth();
     if (lw == rw)
         return {lhs, rhs};
+    // Extend by the source operand's signedness, like the legacy performCast:
+    // unsigned zero-extends, signed sign-extends. Going by the wider type would
+    // turn a high-bit unsigned value negative when widening into a signed type.
     if (lw < rw) {
-        auto ext = llvm::cast<IntegerType>(rTy).isUnsigned() ? lhs.getValue().zextOrTrunc(rw)
+        auto ext = llvm::cast<IntegerType>(lTy).isUnsigned() ? lhs.getValue().zextOrTrunc(rw)
                                                              : lhs.getValue().sextOrTrunc(rw);
         return {IntegerAttr::getChecked(loc, rTy, ext), rhs};
     }
     auto ext =
-        llvm::cast<IntegerType>(lTy).isUnsigned() ? rhs.getValue().zextOrTrunc(lw) : rhs.getValue().sextOrTrunc(lw);
+        llvm::cast<IntegerType>(rTy).isUnsigned() ? rhs.getValue().zextOrTrunc(lw) : rhs.getValue().sextOrTrunc(lw);
     return {lhs, IntegerAttr::getChecked(loc, lTy, ext)};
 }
 
