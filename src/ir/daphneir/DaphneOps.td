@@ -411,8 +411,8 @@ class Daphne_EwCmpOp<string name, Type inputScalarType, list<Trait> traits = []>
     //let results = (outs AnyTypeOf<[MatrixOf<[BoolScalar]>, BoolScalar, Unknown]>:$res);
 }
 
-def Daphne_EwEqOp  : Daphne_EwCmpOp<"ewEq" , AnyScalar, [Commutative, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
-def Daphne_EwNeqOp : Daphne_EwCmpOp<"ewNeq", AnyScalar, [Commutative, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
+def Daphne_EwEqOp  : Daphne_EwCmpOp<"ewEq" , AnyScalar, [Commutative, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt", "foldScalarCmpBool"]>]>;
+def Daphne_EwNeqOp : Daphne_EwCmpOp<"ewNeq", AnyScalar, [Commutative, CUDASupport, DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt", "foldScalarCmpBool"]>]>;
 def Daphne_EwLtOp  : Daphne_EwCmpOp<"ewLt" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
 def Daphne_EwLeOp  : Daphne_EwCmpOp<"ewLe" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;
 def Daphne_EwGtOp  : Daphne_EwCmpOp<"ewGt" , AnyScalar, [DeclareOpInterfaceMethods<ScalarConstantFoldable, ["foldScalarCmpFloat", "foldScalarCmpSInt", "foldScalarCmpUInt"]>]>;

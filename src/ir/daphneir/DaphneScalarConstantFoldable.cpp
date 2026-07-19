@@ -183,6 +183,16 @@ static Attribute foldScalarCmpBinary(ScalarConstantFoldable op, Attribute lhs, A
         if (auto v = op.foldScalarCmpFloat(l.getValue(), r.getValue()))
             return materialize(*v);
     }
+    // Bool checked before int: a BoolAttr is an i1 IntegerAttr, so isIntAttrPair
+    // would match it, but i1 is signless and would fall through the signed /
+    // unsigned branches below. Legacy Eq / Neq folded bool pairs, so route them
+    // here first.
+    if (isBoolAttrPair(lhs, rhs)) {
+        auto l = llvm::cast<BoolAttr>(lhs).getValue();
+        auto r = llvm::cast<BoolAttr>(rhs).getValue();
+        if (auto v = op.foldScalarCmpBool(l, r))
+            return materialize(*v);
+    }
     if (isIntAttrPair(lhs, rhs)) {
         auto [l, r] = promoteWidth(llvm::cast<IntegerAttr>(lhs), llvm::cast<IntegerAttr>(rhs), loc);
         Type argTy = l.getType();

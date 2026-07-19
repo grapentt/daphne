@@ -419,9 +419,9 @@ mlir::OpFoldResult mlir::daphne::EwEqOp::fold(FoldAdaptor adaptor) {
     return {};
 }
 
-// The legacy Eq folder was signedness-agnostic on integer inputs. The driver
-// dispatches by input-type signedness, so both methods share a body to cover
-// signed, unsigned, and (via signed fallback) signless inputs.
+// The legacy Eq folder was signedness-agnostic on integer inputs, and also
+// folded bool pairs (a BoolAttr is an i1 IntegerAttr). The driver dispatches by
+// kind, so we spell out signed, unsigned, and bool with the same body.
 std::optional<bool> mlir::daphne::EwEqOp::foldScalarCmpFloat(const llvm::APFloat &a, const llvm::APFloat &b) {
     return a == b;
 }
@@ -433,6 +433,8 @@ std::optional<bool> mlir::daphne::EwEqOp::foldScalarCmpSInt(const llvm::APInt &a
 std::optional<bool> mlir::daphne::EwEqOp::foldScalarCmpUInt(const llvm::APInt &a, const llvm::APInt &b) {
     return a == b;
 }
+
+std::optional<bool> mlir::daphne::EwEqOp::foldScalarCmpBool(bool a, bool b) { return a == b; }
 
 mlir::OpFoldResult mlir::daphne::EwNeqOp::fold(FoldAdaptor adaptor) {
     return foldScalarOp(*this, adaptor.getOperands(), getType(), getLoc());
@@ -449,6 +451,8 @@ std::optional<bool> mlir::daphne::EwNeqOp::foldScalarCmpSInt(const llvm::APInt &
 std::optional<bool> mlir::daphne::EwNeqOp::foldScalarCmpUInt(const llvm::APInt &a, const llvm::APInt &b) {
     return a != b;
 }
+
+std::optional<bool> mlir::daphne::EwNeqOp::foldScalarCmpBool(bool a, bool b) { return a != b; }
 
 mlir::OpFoldResult mlir::daphne::EwLtOp::fold(FoldAdaptor adaptor) {
     return foldScalarOp(*this, adaptor.getOperands(), getType(), getLoc());

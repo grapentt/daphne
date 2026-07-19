@@ -109,6 +109,12 @@ def ScalarConstantFoldable : OpInterface<"ScalarConstantFoldable"> {
             (ins "const llvm::APInt &":$a, "const llvm::APInt &":$b),
             [{}], [{ return std::nullopt; }]
         >,
+        InterfaceMethod<
+            "Compare two bools. Return nullopt if unsupported.",
+            "std::optional<bool>", "foldScalarCmpBool",
+            (ins "bool":$a, "bool":$b),
+            [{}], [{ return std::nullopt; }]
+        >,
     ];
 }
 
