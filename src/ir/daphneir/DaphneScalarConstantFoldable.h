@@ -37,15 +37,18 @@ namespace mlir::daphne {
  * @brief Fold a scalar op with constant operands by delegating to the op's
  *        `ScalarConstantFoldable` methods.
  *
- * The driver walks numeric kinds in the same precedence order the legacy
- * per-op templates used (float, then signed int, unsigned int, bool) and returns
- * the first non-empty result. If none of the kinds apply, a null Attribute is
- * returned, which the caller should propagate as "no folding possible".
+ * The driver tries the numeric kinds in the same precedence the legacy per-op
+ * templates used (float, then bool, then signed int, unsigned int) and returns
+ * the first non-empty result. Bool comes before int because a BoolAttr is an i1
+ * IntegerAttr, so it would otherwise be caught by the int path. If none of the
+ * kinds apply, a null Attribute is returned, which the caller should propagate
+ * as "no folding possible".
  *
  * Arity is inferred from `operands.size()`; the driver dispatches to the
- * unary or binary methods accordingly. Comparison-flavoured ops (numeric in,
- * bool out) are recognised by result type: when `resultType` is `i1`, the
- * driver calls the `foldScalarCmp*` methods instead of the arithmetic ones.
+ * unary or binary methods accordingly. Comparison ops (numeric in, bool out)
+ * are recognised by the `ValueTypeCmp` trait, not the result type: a comparison
+ * carries the most-general argument value type (e.g. si64/f64), never i1, so a
+ * result-type heuristic would never route them to the `foldScalarCmp*` methods.
  *
  * String semantics and division-by-zero raising are intentionally out of
  * scope; the corresponding ops keep their bespoke folders in `Fold.cpp`.
