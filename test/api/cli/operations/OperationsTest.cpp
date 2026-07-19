@@ -164,15 +164,17 @@ TEST_CASE("operator_at_symmetry_inference", TAG_OPERATIONS) {
                            "numCols=4", "checkSymmetry=false");
 
     CHECK(status == StatusCode::SUCCESS);
-    // Both matmul results (t(X) @ X and X @ t(X)) must carry the inferred symmetric property, so the dump must contain
-    // the annotation at least twice. A bare Contains() would pass even if only one of the two paths (folded vs.
-    // un-folded syrk shape) inferred symmetry, so count occurrences instead.
+    // Both matmul results (t(X) @ X and X @ t(X)) must be inferred symmetric. Counting "symmetric[true]" hits can't
+    // tell whether both paths worked: each type is printed at its definition and again at every use, so one symetric
+    // result already gives two hits. Count the matMul definition lines that carry the property instead, one per
+    // result, so >= 2 means both got it.
     const std::string dump = err.str();
-    size_t symCount = 0;
-    for (size_t pos = dump.find("symmetric[true]"); pos != std::string::npos;
-         pos = dump.find("symmetric[true]", pos + 1))
-        ++symCount;
-    CHECK(symCount >= 2);
+    size_t symMatMulDefs = 0;
+    std::stringstream dumpLines(dump);
+    for (std::string line; std::getline(dumpLines, line);)
+        if (line.find("= \"daphne.matMul\"") != std::string::npos && line.find("symmetric[true]") != std::string::npos)
+            ++symMatMulDefs;
+    CHECK(symMatMulDefs >= 2);
 }
 
 TEST_CASE("operator_at_non_syrk_not_symmetric", TAG_OPERATIONS) {
