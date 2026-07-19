@@ -189,3 +189,15 @@ TEST_CASE("operator_at_non_syrk_not_symmetric", TAG_OPERATIONS) {
     CHECK(status == StatusCode::SUCCESS);
     CHECK_THAT(err.str(), !Catch::Contains("symmetric[true]"));
 }
+
+TEST_CASE("operator_at_square_not_symmetric", TAG_OPERATIONS) {
+    // Same operand, but no transpose: `X @ X` is not a syrk shape and not symmetric in general, so it must NOT be
+    // annotated symmetric[true]. Guards the `transa != transb` check that the distinct-operand X @ Y case never hits.
+    std::string scriptFilePath = dirPath + "operator_at_square.daphne";
+
+    std::stringstream out, err;
+    int status = runDaphne(out, err, "--explain", "property_inference", scriptFilePath.c_str());
+
+    CHECK(status == StatusCode::SUCCESS);
+    CHECK_THAT(err.str(), !Catch::Contains("symmetric[true]"));
+}
